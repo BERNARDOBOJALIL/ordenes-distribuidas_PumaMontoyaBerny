@@ -3,42 +3,26 @@ Writer Service — internal persistence microservice.
 
 Responsibilities
 ----------------
-1. Background Redis worker: polls ``orders_queue`` every WORKER_INTERVAL
-   seconds, deserialises each message and persists it in PostgreSQL.
-2. REST endpoints proxied by the api-gateway:
-   GET  /orders          — list all orders
-   GET  /orders/{id}     — single order
-   PUT  /orders/{id}     — partial update
-   DELETE /orders/{id}   — remove
+- POST /internal/orders : idempotent insert into PostgreSQL.
+- Updates Redis hash ``order:{id}`` with status PERSISTED / FAILED.
 
 Flow
 ----
-api-gateway  →  lpush(orders_queue, JSON)
-                              ↓  (async, every 10 s)
-              redis_queue_worker  →  PostgreSQL (via AsyncSession)
+api-gateway  →  POST /internal/orders  →  PostgreSQL + Redis hash update
 """
 
-import asyncio
-import json
 import logging
 from contextlib import asynccontextmanager
-from typing import List
+from datetime import datetime, timezone
 
 import redis.asyncio as aioredis
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import FastAPI, Header, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .config import settings
-from .db import AsyncSessionLocal, get_session, init_db
-from .redis_client import get_redis_client
-from .repositories.orders_repo import (
-    delete_order,
-    get_order,
-    list_orders,
-    update_order,
-    upsert_order,
-)
-from .schemas import OrderResponse, OrderUpdate
+from .db import AsyncSessionLocal, init_db
+from .repositories.orders_repo import upsert_order
+from .schemas import InternalOrder
 
 # ─── Logging ──────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -48,61 +32,16 @@ logging.basicConfig(
 logger = logging.getLogger("writer-service")
 
 
-# ─── Background Redis worker ──────────────────────────────────────────────────
-async def redis_queue_worker(redis: aioredis.Redis) -> None:
-    """
-    Infinite loop that consumes one message per tick from ``orders_queue``.
-
-    Uses rpop (pairs with api-gateway's lpush) for FIFO ordering.
-    On DB failure the raw message is pushed back to avoid data loss.
-    """
-    logger.info(
-        "[WORKER] Started — polling '%s' every %ds",
-        settings.queue_name,
-        settings.worker_interval,
-    )
-    while True:
-        await asyncio.sleep(settings.worker_interval)
-        try:
-            raw = await redis.rpop(settings.queue_name)
-            if raw is None:
-                logger.debug("[WORKER] Queue empty — waiting %ds …", settings.worker_interval)
-                continue
-
-            data: dict = json.loads(raw)
-            logger.info("[WORKER] Processing order: %s", data)
-
-            async with AsyncSessionLocal() as session:
-                try:
-                    order = await upsert_order(session, data)
-                    logger.info(
-                        "[WORKER] ✓ Saved — id=%d, cliente=%s",
-                        order.id,
-                        order.cliente,
-                    )
-                except Exception as db_err:
-                    logger.error("[WORKER] DB error — returning message to queue: %s", db_err)
-                    await redis.rpush(settings.queue_name, raw)
-
-        except asyncio.CancelledError:
-            logger.info("[WORKER] Cancelled — shutting down.")
-            break
-        except Exception as err:
-            logger.error("[WORKER] Unexpected error: %s", err)
-
-
 # ─── Lifecycle ────────────────────────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # startup
     await init_db()
-    redis = get_redis_client()
-    worker_task = asyncio.create_task(redis_queue_worker(redis))
-    logger.info("[App] DB tables ready. Redis worker running.")
+    app.state.redis = aioredis.from_url(settings.redis_url, decode_responses=True)
+    logger.info("[App] DB tables ready. Redis connected.")
     yield
     # shutdown
-    worker_task.cancel()
-    await redis.aclose()
+    await app.state.redis.aclose()
     logger.info("[App] Shutdown complete.")
 
 
@@ -111,8 +50,8 @@ app = FastAPI(
     title="Writer Service – Órdenes",
     description=(
         "Servicio interno que persiste órdenes en PostgreSQL.\n\n"
-        "Consume la cola Redis **orders_queue** cada "
-        f"**{settings.worker_interval} s** e implementa un `upsert_order` idempotente."
+        "Recibe peticiones del api-gateway vía `POST /internal/orders` "
+        "e implementa un `upsert_order` idempotente."
     ),
     version="1.0.0",
     lifespan=lifespan,
@@ -125,69 +64,61 @@ async def root():
     return {"service": "writer-service", "status": "ok", "version": "1.0.0"}
 
 
-# ─── Orders ───────────────────────────────────────────────────────────────────
-@app.get(
-    "/orders",
-    response_model=List[OrderResponse],
-    tags=["Órdenes"],
-    summary="Listar órdenes",
+# ─── Internal endpoint ────────────────────────────────────────────────────────
+@app.post(
+    "/internal/orders",
+    status_code=201,
+    tags=["Internal"],
+    summary="Persiste una orden en PostgreSQL (idempotente)",
 )
-async def listar_ordenes(
-    skip: int = 0,
-    limit: int = 100,
-    session: AsyncSession = Depends(get_session),
+async def persist_order(
+    payload: InternalOrder,
+    request: Request,
+    x_request_id: str = Header(default=""),
 ):
-    """Devuelve todas las órdenes almacenadas (paginadas con skip/limit)."""
-    return await list_orders(session, skip=skip, limit=limit)
+    """
+    Receives an order from the api-gateway, inserts it into PostgreSQL
+    (only if order_id does not already exist), and updates the Redis hash
+    with status = PERSISTED or FAILED.
+    """
+    redis = request.app.state.redis
+    request_id = x_request_id
+    logger.info(
+        "[POST /internal/orders] order_id=%s  X-Request-Id=%s",
+        payload.order_id,
+        request_id,
+    )
 
+    try:
+        async with AsyncSessionLocal() as session:
+            order, created = await upsert_order(
+                session,
+                order_id=payload.order_id,
+                customer=payload.customer,
+                items=[item.model_dump() for item in payload.items],
+            )
 
-@app.get(
-    "/orders/{orden_id}",
-    response_model=OrderResponse,
-    tags=["Órdenes"],
-    summary="Obtener orden por ID",
-)
-async def obtener_orden(
-    orden_id: int,
-    session: AsyncSession = Depends(get_session),
-):
-    """Devuelve una orden por su ID entero."""
-    order = await get_order(session, orden_id)
-    if not order:
-        raise HTTPException(status_code=404, detail=f"Orden {orden_id} no encontrada")
-    return order
+        now = datetime.now(timezone.utc).isoformat()
+        await redis.hset(
+            f"order:{payload.order_id}",
+            mapping={"status": "PERSISTED", "last_update": now},
+        )
+        logger.info(
+            "[POST /internal/orders] ✓ %s order_id=%s",
+            "Created" if created else "Already existed",
+            payload.order_id,
+        )
+        return {"order_id": payload.order_id, "status": "PERSISTED", "created": created}
 
-
-@app.put(
-    "/orders/{orden_id}",
-    response_model=OrderResponse,
-    tags=["Órdenes"],
-    summary="Actualizar orden (parcial)",
-)
-async def actualizar_orden(
-    orden_id: int,
-    datos: OrderUpdate,
-    session: AsyncSession = Depends(get_session),
-):
-    """Actualiza sólo los campos enviados en el body (PATCH semántico)."""
-    changes = datos.model_dump(exclude_unset=True)
-    order = await update_order(session, orden_id, changes)
-    if not order:
-        raise HTTPException(status_code=404, detail=f"Orden {orden_id} no encontrada")
-    return order
-
-
-@app.delete(
-    "/orders/{orden_id}",
-    status_code=204,
-    tags=["Órdenes"],
-    summary="Eliminar orden",
-)
-async def eliminar_orden(
-    orden_id: int,
-    session: AsyncSession = Depends(get_session),
-):
-    """Elimina una orden por su ID. Devuelve 204 sin cuerpo."""
-    deleted = await delete_order(session, orden_id)
-    if not deleted:
-        raise HTTPException(status_code=404, detail=f"Orden {orden_id} no encontrada")
+    except Exception as exc:
+        now = datetime.now(timezone.utc).isoformat()
+        await redis.hset(
+            f"order:{payload.order_id}",
+            mapping={"status": "FAILED", "last_update": now},
+        )
+        logger.error(
+            "[POST /internal/orders] ✗ FAILED order_id=%s: %s",
+            payload.order_id,
+            exc,
+        )
+        return {"order_id": payload.order_id, "status": "FAILED", "error": str(exc)}

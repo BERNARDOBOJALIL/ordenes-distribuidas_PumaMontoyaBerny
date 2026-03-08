@@ -9,10 +9,6 @@ class Settings(BaseSettings):
 
     # Redis
     redis_url: str = "redis://redis:6379/0"
-    queue_name: str = "orders_queue"
-
-    # Worker
-    worker_interval: int = 10  # seconds between queue polls
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

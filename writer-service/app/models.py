@@ -1,6 +1,6 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
-from sqlalchemy import Column, DateTime, Float, Integer, String
+from sqlalchemy import Column, DateTime, String, Text
 from sqlalchemy.orm import DeclarativeBase
 
 
@@ -9,14 +9,11 @@ class Base(DeclarativeBase):
 
 
 class Order(Base):
-    """ORM model that mirrors the api-gateway payload schema."""
+    """ORM model — matches the README spec."""
 
     __tablename__ = "orders"
 
-    id        = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    cliente   = Column(String(255), nullable=False)
-    producto  = Column(String(255), nullable=False)
-    cantidad  = Column(Integer, nullable=False)
-    precio    = Column(Float, nullable=False)
-    estado    = Column(String(50), default="pendiente")
-    creado_en = Column(DateTime, default=datetime.utcnow)
+    order_id   = Column(String(36), primary_key=True, index=True)
+    customer   = Column(String(255), nullable=False)
+    items      = Column(Text, nullable=False)          # JSON string
+    created_at = Column(DateTime, default=lambda: datetime.utcnow())

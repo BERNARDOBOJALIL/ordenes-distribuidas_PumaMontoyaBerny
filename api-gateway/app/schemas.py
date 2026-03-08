@@ -1,37 +1,27 @@
+from typing import List, Optional
+
 from pydantic import BaseModel, Field
-from typing import Optional
+
+
+class ItemPayload(BaseModel):
+    sku: str = Field(..., examples=["A1"])
+    qty: int = Field(..., gt=0, examples=[2])
 
 
 class OrderCreate(BaseModel):
-    cliente:  str   = Field(..., examples=["Juan Pérez"])
-    producto: str   = Field(..., examples=["Laptop"])
-    cantidad: int   = Field(..., gt=0, examples=[2])
-    precio:   float = Field(..., gt=0, examples=[999.99])
-    estado:   Optional[str] = Field("pendiente", examples=["pendiente"])
-
-    model_config = {
-        "json_schema_extra": {
-            "example": {
-                "cliente": "Juan Pérez",
-                "producto": "Laptop",
-                "cantidad": 2,
-                "precio": 999.99,
-                "estado": "pendiente",
-            }
-        }
-    }
+    """Body of POST /orders."""
+    customer: str = Field(..., examples=["Berny"])
+    items: List[ItemPayload] = Field(..., examples=[[{"sku": "A1", "qty": 2}]])
 
 
-class OrderUpdate(BaseModel):
-    cliente:  Optional[str]   = None
-    producto: Optional[str]   = None
-    cantidad: Optional[int]   = Field(None, gt=0)
-    precio:   Optional[float] = Field(None, gt=0)
-    estado:   Optional[str]   = None
+class OrderAccepted(BaseModel):
+    """202 response when an order is accepted."""
+    order_id: str
+    status: str = "RECEIVED"
 
 
-class OrderQueued(BaseModel):
-    message:          str
-    status:           str
-    posicion_en_cola: int
-    tiempo_estimado:  str
+class OrderStatus(BaseModel):
+    """GET /orders/{order_id} response from Redis hash."""
+    order_id: str
+    status: str
+    last_update: Optional[str] = None
