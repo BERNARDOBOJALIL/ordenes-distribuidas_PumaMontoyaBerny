@@ -786,13 +786,36 @@
   }
 
   // ── UI helpers ──
+  function formatMxTime(value) {
+    if (typeof value !== 'string' || !value.trim()) return value;
+
+    // If backend sends naive ISO (no timezone), treat it as UTC.
+    const iso = /Z$|[+-]\d{2}:?\d{2}$/.test(value) ? value : value + 'Z';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return value;
+
+    return new Intl.DateTimeFormat('es-MX', {
+      timeZone: 'America/Mexico_City',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    }).format(d) + ' GMT-6';
+  }
+
   function showResponse(box, data, type) {
     box.className = 'response-box show';
     box.innerHTML = Object.entries(data).map(([k, v]) => {
+      const shown = (k === 'last_update' || k === 'created_at')
+        ? formatMxTime(v)
+        : v;
       const valClass = k === 'status'
         ? `response-val ${String(v).toLowerCase()}`
         : 'response-val';
-      return `<div><span class="response-key">${k}: </span><span class="${valClass}">${JSON.stringify(v)}</span></div>`;
+      return `<div><span class="response-key">${k}: </span><span class="${valClass}">${JSON.stringify(shown)}</span></div>`;
     }).join('');
   }
 
