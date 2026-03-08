@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .config import settings
 from .db import AsyncSessionLocal, init_db
-from .repositories.orders_repo import upsert_order
+from .repositories.orders_repo import upsert_order, get_all_orders
 from .schemas import InternalOrder
 
 # ─── Logging ──────────────────────────────────────────────────────────────────
@@ -122,3 +122,25 @@ async def persist_order(
             exc,
         )
         return {"order_id": payload.order_id, "status": "FAILED", "error": str(exc)}
+
+
+# ─── List orders ──────────────────────────────────────────────────────────────
+@app.get(
+    "/internal/orders",
+    tags=["Internal"],
+    summary="Lista todas las órdenes desde PostgreSQL",
+)
+async def list_orders(request: Request):
+    """Devuelve todas las órdenes guardadas en PostgreSQL."""
+    import json as _json
+    async with AsyncSessionLocal() as session:
+        orders = await get_all_orders(session)
+    return [
+        {
+            "order_id": o.order_id,
+            "customer": o.customer,
+            "items": _json.loads(o.items),
+            "created_at": o.created_at.isoformat() if o.created_at else None,
+        }
+        for o in orders
+    ]

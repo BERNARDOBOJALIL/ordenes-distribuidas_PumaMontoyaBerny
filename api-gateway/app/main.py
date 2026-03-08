@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 import httpx
 import redis.asyncio as aioredis
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
 from .schemas import OrderAccepted, OrderCreate, OrderStatus
@@ -34,6 +35,13 @@ app = FastAPI(
     ),
     version="1.0.0",
     lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -85,3 +93,19 @@ async def obtener_orden(order_id: str):
     if not data:
         raise HTTPException(status_code=404, detail=f"Orden {order_id} no encontrada en Redis")
     return data
+
+
+@app.get(
+    "/orders",
+    tags=["Ordenes"],
+    summary="Listar todas las órdenes (desde PostgreSQL vía writer-service)",
+)
+async def listar_ordenes():
+    """Proxy a GET /internal/orders del writer-service."""
+    try:
+        url = f"{settings.writer_service_url}/internal/orders"
+        resp = await app.state.http.get(url, timeout=5.0)
+        resp.raise_for_status()
+        return resp.json()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Writer service no disponible: {exc}")

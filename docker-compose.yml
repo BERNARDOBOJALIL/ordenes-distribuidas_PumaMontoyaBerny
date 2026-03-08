@@ -23,7 +23,6 @@ services:
       interval: 5s
       retries: 5
 
-
   api-gateway:
     build: ./api-gateway
     ports:
@@ -45,6 +44,13 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - api-gateway
 
 volumes:
   pg_data:

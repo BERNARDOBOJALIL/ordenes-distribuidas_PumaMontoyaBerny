@@ -45,3 +45,11 @@ async def get_order(session: AsyncSession, order_id: str) -> Order | None:
         select(Order).where(Order.order_id == order_id)
     )
     return result.scalar_one_or_none()
+
+
+async def get_all_orders(session: AsyncSession) -> list[Order]:
+    """Return all orders ordered by created_at descending."""
+    result = await session.execute(
+        select(Order).order_by(Order.created_at.desc())
+    )
+    return list(result.scalars().all())

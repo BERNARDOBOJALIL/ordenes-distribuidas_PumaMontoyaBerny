@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Órdenes Distribuidas</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #111118;
+    --surface2: #1a1a24;
+    --border: #2a2a3a;
+    --accent: #00e5a0;
+    --accent2: #7c6fff;
+    --warn: #ff6b6b;
+    --text: #e8e8f0;
+    --muted: #6b6b88;
+    --mono: 'Space Mono', monospace;
+    --sans: 'DM Sans', sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Grid noise overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,229,160,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,229,160,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 0 24px;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ── Header ── */
+  header {
+    padding: 32px 0 24px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 40px;
+  }
+
+  .header-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .logo-icon {
+    width: 36px;
+    height: 36px;
+    background: var(--accent);
+    border-radius: 8px;
+    display: grid;
+    place-items: center;
+  }
+
+  .logo-icon svg { color: #0a0a0f; }
+
+  h1 {
+    font-family: var(--mono);
+    font-size: 1.1rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--text);
+  }
+
+  h1 span { color: var(--accent); }
+
+  .status-pill {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 6px 14px;
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    color: var(--muted);
+  }
+
+  .status-pill .dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--muted);
+    transition: background 0.3s;
+  }
+
+  .status-pill.online .dot { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+  .status-pill.offline .dot { background: var(--warn); }
+
+  /* ── Two columns ── */
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin-bottom: 40px;
+  }
+
+  @media (max-width: 640px) { .grid { grid-template-columns: 1fr; } }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    position: relative;
+    overflow: hidden;
+    animation: fadeUp 0.4s ease both;
+  }
+
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  .card:hover::before { opacity: 1; }
+
+  .card-label {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .card-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* ── Form ── */
+  .field { margin-bottom: 16px; }
+
+  label {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--muted);
+    margin-bottom: 6px;
+    font-family: var(--mono);
+  }
+
+  input[type="text"] {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 0.9rem;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+
+  input[type="text"]:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(0,229,160,0.1);
+  }
+
+  input[type="text"]::placeholder { color: var(--muted); }
+
+  /* Items list */
+  .items-list { margin-bottom: 12px; }
+
+  .item-row {
+    display: grid;
+    grid-template-columns: 1fr 80px 32px;
+    gap: 8px;
+    margin-bottom: 8px;
+    animation: fadeUp 0.2s ease both;
+  }
+
+  .btn-remove {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 1rem;
+    transition: all 0.2s;
+    display: grid;
+    place-items: center;
+  }
+
+  .btn-remove:hover { border-color: var(--warn); color: var(--warn); background: rgba(255,107,107,0.08); }
+
+  .btn-add-item {
+    background: transparent;
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-family: var(--mono);
+    padding: 8px;
+    width: 100%;
+    transition: all 0.2s;
+    margin-bottom: 16px;
+  }
+
+  .btn-add-item:hover { border-color: var(--accent); color: var(--accent); background: rgba(0,229,160,0.04); }
+
+  .btn-primary {
+    width: 100%;
+    background: var(--accent);
+    border: none;
+    border-radius: 8px;
+    color: #0a0a0f;
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    padding: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .btn-primary:hover { background: #00ffb3; transform: translateY(-1px); box-shadow: 0 4px 20px rgba(0,229,160,0.3); }
+  .btn-primary:active { transform: translateY(0); }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
+
+  /* ── Query card ── */
+  .query-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+  }
+
+  .btn-secondary {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--accent2);
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 10px 16px;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+
+  .btn-secondary:hover { border-color: var(--accent2); background: rgba(124,111,255,0.1); }
+
+  /* ── Response box ── */
+  .response-box {
+    margin-top: 16px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    line-height: 1.7;
+    min-height: 60px;
+    transition: all 0.3s;
+    display: none;
+  }
+
+  .response-box.show { display: block; animation: fadeUp 0.3s ease; }
+
+  .response-key { color: var(--muted); }
+  .response-val { color: var(--accent); }
+  .response-val.failed { color: var(--warn); }
+  .response-val.received { color: var(--accent); }
+  .response-val.processing { color: #ffd166; }
+  .response-val.saved { color: var(--accent2); }
+
+  /* ── Orders log ── */
+  .orders-log { grid-column: 1 / -1; }
+
+  .log-empty {
+    text-align: center;
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    padding: 32px 0;
+    opacity: 0.5;
+  }
+
+  .order-entry {
+    display: grid;
+    grid-template-columns: auto 1fr auto auto;
+    gap: 12px;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+    animation: fadeUp 0.3s ease both;
+    cursor: pointer;
+    transition: background 0.15s;
+    border-radius: 4px;
+    padding-left: 4px;
+  }
+
+  .order-entry:last-child { border-bottom: none; }
+  .order-entry:hover { background: rgba(255,255,255,0.02); }
+
+  .order-num {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    color: var(--muted);
+    min-width: 24px;
+  }
+
+  .order-id {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .order-customer {
+    font-size: 0.8rem;
+    color: var(--muted);
+    font-weight: 500;
+  }
+
+  .badge {
+    font-family: var(--mono);
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    padding: 3px 10px;
+    border-radius: 999px;
+    text-transform: uppercase;
+  }
+
+  .badge-RECEIVED { background: rgba(0,229,160,0.12); color: var(--accent); border: 1px solid rgba(0,229,160,0.2); }
+  .badge-FAILED { background: rgba(255,107,107,0.12); color: var(--warn); border: 1px solid rgba(255,107,107,0.2); }
+  .badge-PROCESSING { background: rgba(255,209,102,0.12); color: #ffd166; border: 1px solid rgba(255,209,102,0.2); }
+  .badge-SAVED { background: rgba(124,111,255,0.12); color: var(--accent2); border: 1px solid rgba(124,111,255,0.2); }
+  .badge-UNKNOWN { background: rgba(107,107,136,0.12); color: var(--muted); border: 1px solid var(--border); }
+
+  /* ── Toast ── */
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 20px;
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    color: var(--text);
+    z-index: 100;
+    transform: translateY(80px);
+    opacity: 0;
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    max-width: 320px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .toast.success { border-color: rgba(0,229,160,0.4); }
+  .toast.error { border-color: rgba(255,107,107,0.4); }
+  .toast-icon { font-size: 1rem; }
+
+  /* ── Spinner ── */
+  .spinner {
+    width: 14px; height: 14px;
+    border: 2px solid rgba(10,10,15,0.3);
+    border-top-color: #0a0a0f;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    display: none;
+  }
+
+  .loading .spinner { display: block; }
+  .loading .btn-text { display: none; }
+
+  /* ── Animations ── */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  /* ── API URL bar ── */
+  .api-bar {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 24px;
+    font-family: var(--mono);
+    font-size: 0.72rem;
+  }
+
+  .api-bar-label { color: var(--muted); white-space: nowrap; }
+
+  .api-bar input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: var(--accent2);
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    outline: none;
+  }
+
+  .api-bar input:focus { color: var(--text); }
+
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 20px 0 32px;
+    text-align: center;
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <header>
+    <div class="header-inner">
+      <div class="logo">
+        <div class="logo-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+          </svg>
+        </div>
+        <div>
+          <h1>ordenes<span>.</span>distribuidas</h1>
+        </div>
+      </div>
+      <div class="status-pill" id="statusPill">
+        <div class="dot"></div>
+        <span id="statusText">verificando...</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- API URL config -->
+  <div class="api-bar">
+    <span class="api-bar-label">API_BASE →</span>
+    <input type="text" id="apiBase" value="http://localhost:8000" spellcheck="false"/>
+  </div>
+
+  <div class="grid">
+
+    <!-- ── Crear Orden ── -->
+    <div class="card" style="animation-delay:0.05s">
+      <div class="card-label">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        POST /orders
+      </div>
+
+      <div class="field">
+        <label>customer</label>
+        <input type="text" id="customer" placeholder="ej. Berny" />
+      </div>
+
+      <div class="field">
+        <label>items</label>
+        <div class="items-list" id="itemsList"></div>
+        <button class="btn-add-item" onclick="addItem()">+ agregar item</button>
+      </div>
+
+      <button class="btn-primary" id="btnCreate" onclick="createOrder()">
+        <div class="spinner"></div>
+        <span class="btn-text">Crear Orden →</span>
+      </button>
+
+      <div class="response-box" id="createResponse"></div>
+    </div>
+
+    <!-- ── Consultar Orden ── -->
+    <div class="card" style="animation-delay:0.1s">
+      <div class="card-label">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        GET /orders/{id}
+      </div>
+
+      <div class="field">
+        <label>order_id</label>
+        <div class="query-row">
+          <input type="text" id="queryId" placeholder="uuid..." />
+          <button class="btn-secondary" onclick="queryOrder()">Consultar</button>
+        </div>
+      </div>
+
+      <div class="response-box" id="queryResponse"></div>
+
+      <div style="margin-top: 20px;">
+        <div class="card-label" style="margin-bottom: 12px;">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+          polling automático
+        </div>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <button class="btn-secondary" id="btnPoll" onclick="togglePoll()" style="flex:1">▶ Iniciar Poll</button>
+          <span style="font-family:var(--mono);font-size:0.65rem;color:var(--muted)" id="pollStatus">inactivo</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Log de órdenes ── -->
+    <div class="card orders-log" style="animation-delay:0.15s">
+      <div class="card-label" style="justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          historial de sesión
+        </div>
+        <button onclick="clearLog()" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-family:var(--mono);font-size:0.65rem;letter-spacing:0.05em;">limpiar ×</button>
+      </div>
+
+      <div id="ordersLog">
+        <div class="log-empty">// sin órdenes aún</div>
+      </div>
+    </div>
+
+  </div>
+
+  <footer>API GATEWAY v1.0.0 · redis://localhost:6379 · writer-service :8001</footer>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast">
+  <span class="toast-icon" id="toastIcon"></span>
+  <span id="toastMsg"></span>
+</div>
+
+<script>
+  // ── State ──
+  let orders = [];
+  let pollInterval = null;
+  let pollActive = false;
+
+  // ── Init ──
+  window.onload = () => {
+    addItem();
+    checkHealth();
+    loadHistory();
+  };
+
+  async function loadHistory() {
+    try {
+      const r = await fetch(getBase() + '/orders');
+      if (!r.ok) return;
+      const data = await r.json();
+      // data is array of {order_id, customer, items, created_at}
+      // get status for each from Redis via GET /orders/{id}
+      orders = data.map(o => ({ ...o, status: '...' }));
+      renderLog();
+      // enrich with Redis status in background
+      data.forEach(async o => {
+        try {
+          const rs = await fetch(getBase() + '/orders/' + o.order_id);
+          if (rs.ok) {
+            const s = await rs.json();
+            const idx = orders.findIndex(x => x.order_id === o.order_id);
+            if (idx !== -1) { orders[idx].status = s.status; renderLog(); }
+          }
+        } catch {}
+      });
+    } catch {}
+  }
+
+  function getBase() {
+    return document.getElementById('apiBase').value.replace(/\/$/, '');
+  }
+
+  // ── Health check ──
+  async function checkHealth() {
+    const pill = document.getElementById('statusPill');
+    const txt  = document.getElementById('statusText');
+    try {
+      const r = await fetch(getBase() + '/', { signal: AbortSignal.timeout(3000) });
+      if (r.ok) {
+        pill.className = 'status-pill online';
+        txt.textContent = 'gateway online';
+      } else throw new Error();
+    } catch {
+      pill.className = 'status-pill offline';
+      txt.textContent = 'sin conexión';
+    }
+    setTimeout(checkHealth, 10000);
+  }
+
+  // ── Items ──
+  function addItem() {
+    const list = document.getElementById('itemsList');
+    const row = document.createElement('div');
+    row.className = 'item-row';
+    row.innerHTML = `
+      <input type="text" placeholder="SKU (ej. A1)" style="font-family:var(--mono);font-size:0.8rem;" />
+      <input type="text" placeholder="qty" style="font-family:var(--mono);font-size:0.8rem;" />
+      <button class="btn-remove" onclick="this.parentElement.remove()">×</button>
+    `;
+    list.appendChild(row);
+  }
+
+  function getItems() {
+    const rows = document.querySelectorAll('.item-row');
+    const items = [];
+    rows.forEach(row => {
+      const inputs = row.querySelectorAll('input');
+      const sku = inputs[0].value.trim();
+      const qty = parseInt(inputs[1].value.trim());
+      if (sku && qty > 0) items.push({ sku, qty });
+    });
+    return items;
+  }
+
+  // ── Create Order ──
+  async function createOrder() {
+    const customer = document.getElementById('customer').value.trim();
+    const items    = getItems();
+    const btn      = document.getElementById('btnCreate');
+    const resBox   = document.getElementById('createResponse');
+
+    if (!customer) { showToast('Ingresa un customer', 'error'); return; }
+    if (items.length === 0) { showToast('Agrega al menos un item con SKU y qty > 0', 'error'); return; }
+
+    btn.classList.add('loading');
+    btn.disabled = true;
+
+    try {
+      const r = await fetch(getBase() + '/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customer, items })
+      });
+
+      const data = await r.json();
+
+      if (r.status === 202) {
+        showResponse(resBox, data, 'success');
+        addToLog({ ...data, customer, items });
+        document.getElementById('queryId').value = data.order_id;
+        showToast('Orden creada · ' + data.order_id.slice(0,8) + '...', 'success');
+      } else {
+        showResponse(resBox, data, 'error');
+        showToast('Error ' + r.status, 'error');
+      }
+    } catch(e) {
+      showResponse(resBox, { error: e.message }, 'error');
+      showToast('No se pudo conectar al gateway', 'error');
+    }
+
+    btn.classList.remove('loading');
+    btn.disabled = false;
+  }
+
+  // ── Query Order ──
+  async function queryOrder() {
+    const id     = document.getElementById('queryId').value.trim();
+    const resBox = document.getElementById('queryResponse');
+
+    if (!id) { showToast('Ingresa un order_id', 'error'); return; }
+
+    try {
+      const r    = await fetch(getBase() + '/orders/' + id);
+      const data = await r.json();
+
+      if (r.ok) {
+        showResponse(resBox, data, 'success');
+        updateLogEntry(data);
+      } else {
+        showResponse(resBox, data, 'error');
+      }
+    } catch(e) {
+      showResponse(resBox, { error: e.message }, 'error');
+    }
+  }
+
+  // ── Polling ──
+  function togglePoll() {
+    const btn = document.getElementById('btnPoll');
+    const lbl = document.getElementById('pollStatus');
+
+    if (pollActive) {
+      clearInterval(pollInterval);
+      pollActive = false;
+      btn.textContent = '▶ Iniciar Poll';
+      lbl.textContent = 'inactivo';
+    } else {
+      const id = document.getElementById('queryId').value.trim();
+      if (!id) { showToast('Primero ingresa un order_id', 'error'); return; }
+      pollActive = true;
+      btn.textContent = '■ Detener Poll';
+      lbl.textContent = 'cada 2s';
+      queryOrder();
+      pollInterval = setInterval(queryOrder, 2000);
+    }
+  }
+
+  // ── Log ──
+  function addToLog(order) {
+    orders.unshift(order);
+    renderLog();
+  }
+
+  function updateLogEntry(data) {
+    const idx = orders.findIndex(o => o.order_id === data.order_id);
+    if (idx !== -1) {
+      orders[idx] = { ...orders[idx], ...data };
+      renderLog();
+    }
+  }
+
+  function renderLog() {
+    const log = document.getElementById('ordersLog');
+    if (orders.length === 0) {
+      log.innerHTML = '<div class="log-empty">// sin órdenes aún</div>';
+      return;
+    }
+    log.innerHTML = orders.map((o, i) => `
+      <div class="order-entry" onclick="selectOrder('${o.order_id}')">
+        <span class="order-num">${String(orders.length - i).padStart(2,'0')}</span>
+        <span class="order-id">${o.order_id}</span>
+        <span class="order-customer">${o.customer || '—'}</span>
+        <span class="badge badge-${o.status || 'UNKNOWN'}">${o.status || '?'}</span>
+      </div>
+    `).join('');
+  }
+
+  function selectOrder(id) {
+    document.getElementById('queryId').value = id;
+    queryOrder();
+  }
+
+  function clearLog() {
+    orders = [];
+    renderLog();
+  }
+
+  // ── UI helpers ──
+  function showResponse(box, data, type) {
+    box.className = 'response-box show';
+    box.innerHTML = Object.entries(data).map(([k, v]) => {
+      const valClass = k === 'status'
+        ? `response-val ${String(v).toLowerCase()}`
+        : 'response-val';
+      return `<div><span class="response-key">${k}: </span><span class="${valClass}">${JSON.stringify(v)}</span></div>`;
+    }).join('');
+  }
+
+  let toastTimer;
+  function showToast(msg, type = 'info') {
+    const t = document.getElementById('toast');
+    const m = document.getElementById('toastMsg');
+    const i = document.getElementById('toastIcon');
+    clearTimeout(toastTimer);
+    m.textContent = msg;
+    i.textContent = type === 'success' ? '✓' : type === 'error' ? '✗' : 'ℹ';
+    t.className = `toast show ${type}`;
+    toastTimer = setTimeout(() => t.className = 'toast', 3000);
+  }
+</script>
+</body>
+</html>
