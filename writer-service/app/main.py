@@ -1,207 +1,193 @@
-from fastapi import FastAPI, HTTPException, Depends
-from pydantic import BaseModel
-from typing import Optional, List
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, Session
-from datetime import datetime
+"""
+Writer Service — internal persistence microservice.
+
+Responsibilities
+----------------
+1. Background Redis worker: polls ``orders_queue`` every WORKER_INTERVAL
+   seconds, deserialises each message and persists it in PostgreSQL.
+2. REST endpoints proxied by the api-gateway:
+   GET  /orders          — list all orders
+   GET  /orders/{id}     — single order
+   PUT  /orders/{id}     — partial update
+   DELETE /orders/{id}   — remove
+
+Flow
+----
+api-gateway  →  lpush(orders_queue, JSON)
+                              ↓  (async, every 10 s)
+              redis_queue_worker  →  PostgreSQL (via AsyncSession)
+"""
+
 import asyncio
 import json
-import os
-import time
+import logging
+from contextlib import asynccontextmanager
+from typing import List
+
 import redis.asyncio as aioredis
+from fastapi import Depends, FastAPI, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
 
-# ─── Base de datos (PostgreSQL) ───────────────────────────────────────────────
-DB_USER     = os.getenv("POSTGRES_USER",     "ordenes_user")
-DB_PASSWORD = os.getenv("POSTGRES_PASSWORD", "ordenes_pass")
-DB_HOST     = os.getenv("POSTGRES_HOST",     "db")
-DB_PORT     = os.getenv("POSTGRES_PORT",     "5432")
-DB_NAME     = os.getenv("POSTGRES_DB",       "ordenes_db")
+from .config import settings
+from .db import AsyncSessionLocal, get_session, init_db
+from .redis_client import get_redis_client
+from .repositories.orders_repo import (
+    delete_order,
+    get_order,
+    list_orders,
+    update_order,
+    upsert_order,
+)
+from .schemas import OrderResponse, OrderUpdate
 
-DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-
-def create_engine_with_retry(url: str, retries: int = 10, delay: int = 3):
-    for attempt in range(retries):
-        try:
-            eng = create_engine(url, pool_pre_ping=True)
-            eng.connect()
-            return eng
-        except Exception as exc:
-            print(f"[DB] Intento {attempt + 1}/{retries} fallido: {exc}")
-            time.sleep(delay)
-    raise RuntimeError("No se pudo conectar a PostgreSQL después de varios intentos")
-
-engine = create_engine_with_retry(DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
+# ─── Logging ──────────────────────────────────────────────────────────────────
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+logger = logging.getLogger("writer-service")
 
 
-# ─── Modelo ORM 
-class OrderDB(Base):
-    __tablename__ = "orders"
+# ─── Background Redis worker ──────────────────────────────────────────────────
+async def redis_queue_worker(redis: aioredis.Redis) -> None:
+    """
+    Infinite loop that consumes one message per tick from ``orders_queue``.
 
-    id          = Column(Integer, primary_key=True, index=True)
-    cliente     = Column(String, nullable=False)
-    producto    = Column(String, nullable=False)
-    cantidad    = Column(Integer, nullable=False)
-    precio      = Column(Float, nullable=False)
-    estado      = Column(String, default="pendiente")   # pendiente | en_proceso | completado | cancelado
-    creado_en   = Column(DateTime, default=datetime.utcnow)
-
-
-Base.metadata.create_all(bind=engine)
-
-
-# ─── Schemas Pydantic 
-class OrderCreate(BaseModel):
-    cliente:  str
-    producto: str
-    cantidad: int
-    precio:   float
-    estado:   Optional[str] = "pendiente"
-
-
-class OrderUpdate(BaseModel):
-    cliente:  Optional[str]  = None
-    producto: Optional[str]  = None
-    cantidad: Optional[int]  = None
-    precio:   Optional[float]= None
-    estado:   Optional[str]  = None
-
-
-class OrderResponse(BaseModel):
-    id:         int
-    cliente:    str
-    producto:   str
-    cantidad:   int
-    precio:     float
-    estado:     str
-    creado_en:  datetime
-
-    class Config:
-        from_attributes = True
-
-
-# ─── Dependencia DB 
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
-# ─── Config Redis ────────────────────────────────────────────────────────────
-REDIS_URL       = os.getenv("REDIS_URL", "redis://redis:6379")
-QUEUE_NAME      = "orders_queue"
-WORKER_INTERVAL = int(os.getenv("WORKER_INTERVAL", "10"))  # segundos
-
-
-# ─── Worker: consume la cola Redis y guarda en PostgreSQL ────────────────────
-async def redis_worker():
-    """Corre en background. Saca órdenes de Redis y las persiste en PostgreSQL."""
-    r = aioredis.from_url(REDIS_URL, decode_responses=True)
-    print(f"[WORKER] Iniciado. Revisando cola '{QUEUE_NAME}' cada {WORKER_INTERVAL}s")
+    Uses rpop (pairs with api-gateway's lpush) for FIFO ordering.
+    On DB failure the raw message is pushed back to avoid data loss.
+    """
+    logger.info(
+        "[WORKER] Started — polling '%s' every %ds",
+        settings.queue_name,
+        settings.worker_interval,
+    )
     while True:
-        await asyncio.sleep(WORKER_INTERVAL)
+        await asyncio.sleep(settings.worker_interval)
         try:
-            raw = await r.rpop(QUEUE_NAME)
+            raw = await redis.rpop(settings.queue_name)
             if raw is None:
-                print(f"[WORKER] Cola vacía, esperando {WORKER_INTERVAL}s más...")
+                logger.debug("[WORKER] Queue empty — waiting %ds …", settings.worker_interval)
                 continue
 
-            datos = json.loads(raw)
-            print(f"[WORKER] Procesando orden: {datos}")
+            data: dict = json.loads(raw)
+            logger.info("[WORKER] Processing order: %s", data)
 
-            db = SessionLocal()
-            try:
-                # Forzar estado a 'procesado' al salir de la cola
-                datos["estado"] = "procesado"
-                nueva = OrderDB(**datos)
-                db.add(nueva)
-                db.commit()
-                db.refresh(nueva)
-                print(f"[WORKER] ✓ Orden guardada — ID={nueva.id}, cliente={nueva.cliente}")
-            except Exception as db_err:
-                db.rollback()
-                print(f"[WORKER] Error al guardar en DB: {db_err}")
-                # Devolver a la cola para no perder la orden
-                await r.rpush(QUEUE_NAME, raw)
-            finally:
-                db.close()
+            async with AsyncSessionLocal() as session:
+                try:
+                    order = await upsert_order(session, data)
+                    logger.info(
+                        "[WORKER] ✓ Saved — id=%d, cliente=%s",
+                        order.id,
+                        order.cliente,
+                    )
+                except Exception as db_err:
+                    logger.error("[WORKER] DB error — returning message to queue: %s", db_err)
+                    await redis.rpush(settings.queue_name, raw)
 
+        except asyncio.CancelledError:
+            logger.info("[WORKER] Cancelled — shutting down.")
+            break
         except Exception as err:
-            print(f"[WORKER] Error inesperado: {err}")
+            logger.error("[WORKER] Unexpected error: %s", err)
+
+
+# ─── Lifecycle ────────────────────────────────────────────────────────────────
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # startup
+    await init_db()
+    redis = get_redis_client()
+    worker_task = asyncio.create_task(redis_queue_worker(redis))
+    logger.info("[App] DB tables ready. Redis worker running.")
+    yield
+    # shutdown
+    worker_task.cancel()
+    await redis.aclose()
+    logger.info("[App] Shutdown complete.")
 
 
 # ─── App ──────────────────────────────────────────────────────────────────────
 app = FastAPI(
-    title="Órdenes API",
-    description="Microservicio de órdenes — consume cola Redis y persiste en PostgreSQL",
-    version="2.0.0",
+    title="Writer Service – Órdenes",
+    description=(
+        "Servicio interno que persiste órdenes en PostgreSQL.\n\n"
+        "Consume la cola Redis **orders_queue** cada "
+        f"**{settings.worker_interval} s** e implementa un `upsert_order` idempotente."
+    ),
+    version="1.0.0",
+    lifespan=lifespan,
 )
 
 
-@app.on_event("startup")
-async def startup():
-    asyncio.create_task(redis_worker())
-    print("[App] Worker Redis iniciado en background")
+# ─── Health ───────────────────────────────────────────────────────────────────
+@app.get("/", tags=["Health"])
+async def root():
+    return {"service": "writer-service", "status": "ok", "version": "1.0.0"}
 
 
-# ─── Endpoints
-
-@app.get("/", tags=["Root"])
-def root():
-    return {"message": "API de Órdenes funcionando ✓"}
-
-
-@app.post("/orders/", response_model=OrderResponse, status_code=201, tags=["Órdenes"])
-def crear_orden(orden: OrderCreate, db: Session = Depends(get_db)):
-    """Crear una nueva orden."""
-    nueva = OrderDB(**orden.model_dump())
-    db.add(nueva)
-    db.commit()
-    db.refresh(nueva)
-    return nueva
-
-
-@app.get("/orders/", response_model=List[OrderResponse], tags=["Órdenes"])
-def listar_ordenes(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    """Listar todas las órdenes."""
-    return db.query(OrderDB).offset(skip).limit(limit).all()
+# ─── Orders ───────────────────────────────────────────────────────────────────
+@app.get(
+    "/orders",
+    response_model=List[OrderResponse],
+    tags=["Órdenes"],
+    summary="Listar órdenes",
+)
+async def listar_ordenes(
+    skip: int = 0,
+    limit: int = 100,
+    session: AsyncSession = Depends(get_session),
+):
+    """Devuelve todas las órdenes almacenadas (paginadas con skip/limit)."""
+    return await list_orders(session, skip=skip, limit=limit)
 
 
-@app.get("/orders/{orden_id}", response_model=OrderResponse, tags=["Órdenes"])
-def obtener_orden(orden_id: int, db: Session = Depends(get_db)):
-    """Obtener una orden por ID."""
-    orden = db.query(OrderDB).filter(OrderDB.id == orden_id).first()
-    if not orden:
+@app.get(
+    "/orders/{orden_id}",
+    response_model=OrderResponse,
+    tags=["Órdenes"],
+    summary="Obtener orden por ID",
+)
+async def obtener_orden(
+    orden_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    """Devuelve una orden por su ID entero."""
+    order = await get_order(session, orden_id)
+    if not order:
         raise HTTPException(status_code=404, detail=f"Orden {orden_id} no encontrada")
-    return orden
+    return order
 
 
-@app.put("/orders/{orden_id}", response_model=OrderResponse, tags=["Órdenes"])
-def actualizar_orden(orden_id: int, datos: OrderUpdate, db: Session = Depends(get_db)):
-    """Actualizar una orden existente (campos opcionales)."""
-    orden = db.query(OrderDB).filter(OrderDB.id == orden_id).first()
-    if not orden:
+@app.put(
+    "/orders/{orden_id}",
+    response_model=OrderResponse,
+    tags=["Órdenes"],
+    summary="Actualizar orden (parcial)",
+)
+async def actualizar_orden(
+    orden_id: int,
+    datos: OrderUpdate,
+    session: AsyncSession = Depends(get_session),
+):
+    """Actualiza sólo los campos enviados en el body (PATCH semántico)."""
+    changes = datos.model_dump(exclude_unset=True)
+    order = await update_order(session, orden_id, changes)
+    if not order:
         raise HTTPException(status_code=404, detail=f"Orden {orden_id} no encontrada")
-
-    cambios = datos.model_dump(exclude_unset=True)
-    for campo, valor in cambios.items():
-        setattr(orden, campo, valor)
-
-    db.commit()
-    db.refresh(orden)
-    return orden
+    return order
 
 
-@app.delete("/orders/{orden_id}", tags=["Órdenes"])
-def eliminar_orden(orden_id: int, db: Session = Depends(get_db)):
-    """Eliminar una orden por ID."""
-    orden = db.query(OrderDB).filter(OrderDB.id == orden_id).first()
-    if not orden:
+@app.delete(
+    "/orders/{orden_id}",
+    status_code=204,
+    tags=["Órdenes"],
+    summary="Eliminar orden",
+)
+async def eliminar_orden(
+    orden_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    """Elimina una orden por su ID. Devuelve 204 sin cuerpo."""
+    deleted = await delete_order(session, orden_id)
+    if not deleted:
         raise HTTPException(status_code=404, detail=f"Orden {orden_id} no encontrada")
-    db.delete(orden)
-    db.commit()
-    return {"detail": f"Orden {orden_id} eliminada correctamente"}
