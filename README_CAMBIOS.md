@@ -27,6 +27,7 @@ Este documento explica **todo lo que cambió** en el sistema distribuido de órd
 8. [Cómo levantar el sistema](#8-cómo-levantar-el-sistema)
 9. [Cómo validar que todo funciona](#9-cómo-validar-que-todo-funciona)
 10. [Diagrama de arquitectura completo](#10-diagrama-de-arquitectura-completo)
+11. [Refactor interno por capas (services + Pydantic)](#11-refactor-interno-por-capas-services--pydantic)
 
 ---
 
@@ -757,7 +758,103 @@ flowchart TB
 | `writer-service/requirements.txt` | +`pika>=1.3,<2` |
 | `api-gateway/app/config.py` | +`inventory_service_url` |
 | `api-gateway/app/main.py` | +endpoint `GET /inventory/stock` (proxy) |
-| `inventory-service/` | **Nuevo servicio** FastAPI + pika consumer en thread + endpoint `/internal/stock` |
-| `notification-service/` | **Nuevo servicio** script pika puro, loguea confirmaciones |
-| `analytics-service/` | **Nuevo servicio** script pika puro, acumula métricas en memoria |
+| `inventory-service/` | **Nuevo servicio** FastAPI + consumer en thread + endpoint `/internal/stock` + refactor por capas (`services/`) y validación Pydantic |
+| `notification-service/` | **Nuevo servicio** consumer RabbitMQ + refactor por capas (`services/`) y validación Pydantic de eventos |
+| `analytics-service/` | **Nuevo servicio** consumer RabbitMQ + métricas en memoria + refactor por capas (`services/`) y validación Pydantic de eventos |
 | `Frontend/index.html` | +panel de flujo de 5 pasos con colores + panel de stock con auto-refresh |
+
+---
+
+## 11. Refactor interno por capas (services + Pydantic)
+
+Esta sección documenta el cambio más reciente: se mantuvo la misma funcionalidad, pero se reorganizó la implementación para mejorar mantenibilidad y validación de datos.
+
+### 11.1 `inventory-service` — separación por capas
+
+**Antes:** toda la lógica (parsing, validación implícita, descuento de stock y consumo RabbitMQ) estaba dentro de `app/main.py`.
+
+**Ahora:**
+
+```
+inventory-service/app/
+├── main.py
+├── schemas.py
+└── services/
+    ├── consumer_service.py
+    └── stock_service.py
+```
+
+- `schemas.py`
+  - `OrderItem`
+  - `OrderCreatedEvent`
+  - `StockItem`
+  - `StockResponse`
+- `services/consumer_service.py`
+  - deserializa mensaje
+  - valida con `OrderCreatedEvent.model_validate(...)`
+  - decide `ack/nack`
+- `services/stock_service.py`
+  - aplica descuento de stock
+  - devuelve snapshot tipado `StockResponse`
+- `main.py`
+  - arranca FastAPI
+  - levanta thread del consumer
+  - expone `GET /internal/stock` con `response_model=StockResponse`
+
+### 11.2 `notification-service` — separación por capas
+
+**Antes:** script único con lógica de consumo y negocio en `main.py`.
+
+**Ahora:**
+
+```
+notification-service/app/
+├── main.py
+├── schemas.py
+└── services/
+    ├── consumer_service.py
+    └── notification_service.py
+```
+
+- `schemas.py`: `OrderItem`, `OrderCreatedEvent`
+- `services/notification_service.py`: encapsula la acción de negocio `send_confirmation(...)`
+- `services/consumer_service.py`: consume, valida evento con Pydantic, y enruta a la capa de negocio
+- `main.py`: punto de entrada mínimo que ejecuta `run_consumer()`
+
+### 11.3 `analytics-service` — separación por capas
+
+**Antes:** script único con parsing + métricas + RabbitMQ en `main.py`.
+
+**Ahora:**
+
+```
+analytics-service/app/
+├── main.py
+├── schemas.py
+└── services/
+    ├── consumer_service.py
+    └── metrics_service.py
+```
+
+- `schemas.py`: `OrderItem`, `OrderCreatedEvent`
+- `services/metrics_service.py`: mantiene e incrementa `metrics` en memoria
+- `services/consumer_service.py`: valida evento con Pydantic y delega a `register_order_created(...)`
+- `main.py`: solo ejecuta el consumidor
+
+### 11.4 Política de validación y manejo de errores
+
+En los tres consumers refactorizados:
+
+- **Evento válido (Pydantic OK):** procesa y hace `basic_ack`.
+- **Evento inválido (`ValidationError`):** registra error y hace `basic_ack` para evitar bucle infinito con mensaje mal formado.
+- **Error de procesamiento/transitorio:** hace `basic_nack(requeue=True)` para reintentar.
+
+### 11.5 Verificación realizada
+
+Se ejecutó compilación de sintaxis (`python -m py_compile`) sobre los archivos nuevos/actualizados de:
+
+- `inventory-service`
+- `notification-service`
+- `analytics-service`
+
+Resultado: **sin errores de sintaxis**.
