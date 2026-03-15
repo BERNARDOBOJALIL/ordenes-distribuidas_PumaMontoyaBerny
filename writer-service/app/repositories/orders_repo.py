@@ -1,10 +1,3 @@
-"""
-Idempotent repository layer for the Order entity.
-
-All functions receive an AsyncSession and operate exclusively through
-SQLAlchemy ORM calls — no raw SQL strings.
-"""
-
 import json
 
 from sqlalchemy import select

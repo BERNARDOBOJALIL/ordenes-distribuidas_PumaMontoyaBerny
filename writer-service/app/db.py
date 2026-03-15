@@ -21,7 +21,6 @@ AsyncSessionLocal = async_sessionmaker(
 
 
 async def init_db() -> None:
-    """Create all tables on startup (idempotent)."""
     from .models import Base  
 
     async with engine.begin() as conn:
@@ -29,6 +28,5 @@ async def init_db() -> None:
 
 
 async def get_session() -> AsyncSession:
-    """FastAPI dependency that yields an async DB session."""
     async with AsyncSessionLocal() as session:
         yield session

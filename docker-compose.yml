@@ -1,4 +1,14 @@
 services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      retries: 10
+
   postgres:
     image: postgres:16-alpine
     environment:
@@ -31,10 +41,10 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-      writer-service:
+      order-service:
         condition: service_started
 
-  writer-service:
+  order-service:
     build: ./writer-service
     ports:
       - "8001:8001"
@@ -43,6 +53,29 @@ services:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  inventory-service:
+    build: ./inventory-service
+    env_file: .env
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  notification-service:
+    build: ./notification-service
+    env_file: .env
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  analytics-service:
+    build: ./analytics-service
+    env_file: .env
+    depends_on:
+      rabbitmq:
         condition: service_healthy
 
   frontend:

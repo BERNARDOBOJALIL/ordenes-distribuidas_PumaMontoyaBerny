@@ -15,5 +15,5 @@ class Order(Base):
 
     order_id   = Column(String(36), primary_key=True, index=True)
     customer   = Column(String(255), nullable=False)
-    items      = Column(Text, nullable=False)          # JSON string
+    items      = Column(Text, nullable=False)          
     created_at = Column(DateTime, default=lambda: datetime.utcnow())

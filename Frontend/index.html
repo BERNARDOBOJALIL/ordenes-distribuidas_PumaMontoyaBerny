@@ -315,6 +315,136 @@
   /* ── Orders log ── */
   .orders-log { grid-column: 1 / -1; }
 
+  .stock-card { grid-column: 1 / -1; }
+
+  .stock-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+  }
+
+  .stock-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 10px;
+    margin-top: 10px;
+  }
+
+  .stock-item {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+  }
+
+  .stock-sku {
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+
+  .stock-value {
+    font-family: var(--mono);
+    font-size: 0.95rem;
+    color: var(--accent);
+    font-weight: 700;
+  }
+
+  /* ── Event Flow Board ── */
+  .flow-card { grid-column: 1 / -1; }
+
+  .flow-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+
+  .flow-order {
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    color: var(--muted);
+    letter-spacing: 0.04em;
+  }
+
+  .flow-track {
+    display: grid;
+    grid-template-columns: repeat(9, 1fr);
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .flow-step {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px;
+    min-height: 88px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+  }
+
+  .flow-step .title {
+    font-family: var(--mono);
+    font-size: 0.62rem;
+    color: var(--text);
+    line-height: 1.4;
+    letter-spacing: 0.02em;
+  }
+
+  .flow-step .state {
+    font-family: var(--mono);
+    font-size: 0.58rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .flow-connector {
+    text-align: center;
+    font-family: var(--mono);
+    color: var(--muted);
+    opacity: 0.7;
+  }
+
+  .flow-step.done {
+    border-color: rgba(0,229,160,0.35);
+    box-shadow: 0 0 0 1px rgba(0,229,160,0.15) inset;
+  }
+
+  .flow-step.active {
+    border-color: rgba(255,209,102,0.45);
+    box-shadow: 0 0 16px rgba(255,209,102,0.15);
+  }
+
+  .flow-step.failed {
+    border-color: rgba(255,107,107,0.45);
+    box-shadow: 0 0 16px rgba(255,107,107,0.15);
+  }
+
+  .flow-step.done .state { color: var(--accent); }
+  .flow-step.active .state { color: #ffd166; }
+  .flow-step.failed .state { color: var(--warn); }
+
+  @media (max-width: 900px) {
+    .flow-track {
+      grid-template-columns: 1fr;
+    }
+    .flow-connector {
+      transform: rotate(90deg);
+      justify-self: center;
+    }
+  }
+
   .log-empty {
     text-align: center;
     color: var(--muted);
@@ -554,6 +684,37 @@
       </div>
     </div>
 
+    <!-- ── Flujo visual RabbitMQ ── -->
+    <div class="card flow-card" style="animation-delay:0.13s">
+      <div class="card-label">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        flujo de eventos · rabbitmq
+      </div>
+
+      <div class="flow-header">
+        <div class="flow-order" id="flowOrder">order_id: —</div>
+        <span class="badge badge-UNKNOWN" id="flowGlobalStatus">SIN DATOS</span>
+      </div>
+
+      <div class="flow-track" id="flowTrack"></div>
+    </div>
+
+    <div class="card stock-card" style="animation-delay:0.14s">
+      <div class="card-label">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 7 9 18l-5-5"/></svg>
+        stock actual (inventory-service)
+      </div>
+
+      <div class="stock-toolbar">
+        <span style="font-family:var(--mono);font-size:0.65rem;color:var(--muted)">GET /inventory/stock</span>
+        <button class="btn-secondary" onclick="refreshStock()">Refrescar stock</button>
+      </div>
+
+      <div class="stock-grid" id="stockGrid">
+        <div class="log-empty">// sin datos de stock aún</div>
+      </div>
+    </div>
+
     <!-- ── Log de órdenes ── -->
     <div class="card orders-log" style="animation-delay:0.15s">
       <div class="card-label" style="justify-content: space-between; flex-wrap: wrap; gap: 8px;">
@@ -571,7 +732,7 @@
 
   </div>
 
-  <footer>API GATEWAY v1.0.0 · redis://localhost:6379 · writer-service :8001</footer>
+  <footer>API GATEWAY v1.0.0 · redis://localhost:6379 · order-service :8001 · rabbitmq :5672</footer>
 </div>
 
 <!-- Toast -->
@@ -586,11 +747,33 @@
   let pollInterval = null;
   let pollActive = false;
 
+  const FLOW_STEPS = [
+    { key: 'order', label: 'order-service\ncrea orden' },
+    { key: 'publish', label: 'publica evento\norder.created' },
+    { key: 'inventory', label: 'inventory-service\ndescuenta stock' },
+    { key: 'notification', label: 'notification-service\nmanda confirmación' },
+    { key: 'analytics', label: 'analytics-service\nregistra métrica' },
+  ];
+
+  const flowState = {
+    orderId: null,
+    globalStatus: 'SIN DATOS',
+    steps: {
+      order: 'idle',
+      publish: 'idle',
+      inventory: 'idle',
+      notification: 'idle',
+      analytics: 'idle',
+    }
+  };
+
   // ── Init ──
   window.onload = () => {
     addItem();
     checkHealth();
     loadHistory();
+    renderFlow();
+    refreshStock();
   };
 
   async function loadHistory() {
@@ -688,6 +871,8 @@
         showResponse(resBox, data, 'success');
         addToLog({ ...data, customer, items });
         document.getElementById('queryId').value = data.order_id;
+        applyFlowFromStatus(data.order_id, 'RECEIVED');
+        setTimeout(refreshStock, 1200);
         showToast('Orden creada · ' + data.order_id.slice(0,8) + '...', 'success');
       } else {
         showResponse(resBox, data, 'error');
@@ -716,11 +901,15 @@
       if (r.ok) {
         showResponse(resBox, data, 'success');
         updateLogEntry(data);
+        applyFlowFromStatus(data.order_id, data.status || 'UNKNOWN');
+        if ((data.status || '').toUpperCase() === 'PERSISTED') refreshStock();
       } else {
         showResponse(resBox, data, 'error');
+        applyFlowFromStatus(id, 'FAILED');
       }
     } catch(e) {
       showResponse(resBox, { error: e.message }, 'error');
+      applyFlowFromStatus(id, 'FAILED');
     }
   }
 
@@ -783,6 +972,125 @@
   function clearLog() {
     orders = [];
     renderLog();
+    resetFlow();
+  }
+
+  function resetFlow() {
+    flowState.orderId = null;
+    flowState.globalStatus = 'SIN DATOS';
+    flowState.steps = {
+      order: 'idle',
+      publish: 'idle',
+      inventory: 'idle',
+      notification: 'idle',
+      analytics: 'idle',
+    };
+    renderFlow();
+  }
+
+  function applyFlowFromStatus(orderId, status) {
+    const s = String(status || '').toUpperCase();
+    flowState.orderId = orderId || flowState.orderId;
+    flowState.globalStatus = s || 'SIN DATOS';
+
+    if (s === 'RECEIVED') {
+      flowState.steps = {
+        order: 'done',
+        publish: 'active',
+        inventory: 'idle',
+        notification: 'idle',
+        analytics: 'idle',
+      };
+    } else if (s === 'PERSISTED') {
+      flowState.steps = {
+        order: 'done',
+        publish: 'done',
+        inventory: 'done',
+        notification: 'done',
+        analytics: 'done',
+      };
+    } else if (s === 'FAILED') {
+      flowState.steps = {
+        order: 'failed',
+        publish: 'failed',
+        inventory: 'idle',
+        notification: 'idle',
+        analytics: 'idle',
+      };
+    } else {
+      flowState.steps = {
+        order: 'idle',
+        publish: 'idle',
+        inventory: 'idle',
+        notification: 'idle',
+        analytics: 'idle',
+      };
+    }
+
+    renderFlow();
+  }
+
+  function renderFlow() {
+    const flowTrack = document.getElementById('flowTrack');
+    const flowOrder = document.getElementById('flowOrder');
+    const flowGlobalStatus = document.getElementById('flowGlobalStatus');
+
+    flowOrder.textContent = 'order_id: ' + (flowState.orderId || '—');
+    flowGlobalStatus.textContent = flowState.globalStatus;
+    flowGlobalStatus.className = 'badge badge-' + (flowState.globalStatus || 'UNKNOWN');
+
+    const parts = [];
+    FLOW_STEPS.forEach((step, idx) => {
+      const state = flowState.steps[step.key] || 'idle';
+      const stateText = state === 'done'
+        ? 'completado'
+        : state === 'active'
+          ? 'en proceso'
+          : state === 'failed'
+            ? 'falló'
+            : 'pendiente';
+
+      parts.push(`
+        <div class="flow-step ${state}">
+          <div class="title">${step.label.replace('\n', '<br/>')}</div>
+          <div class="state">${stateText}</div>
+        </div>
+      `);
+
+      if (idx < FLOW_STEPS.length - 1) {
+        parts.push('<div class="flow-connector">→</div>');
+      }
+    });
+
+    flowTrack.innerHTML = parts.join('');
+  }
+
+  async function refreshStock() {
+    const stockGrid = document.getElementById('stockGrid');
+    try {
+      const r = await fetch(getBase() + '/inventory/stock');
+      const data = await r.json();
+
+      if (!r.ok) {
+        stockGrid.innerHTML = `<div class="log-empty">// error stock: ${JSON.stringify(data)}</div>`;
+        return;
+      }
+
+      const items = Array.isArray(data.items) ? data.items : [];
+      if (items.length === 0) {
+        stockGrid.innerHTML = '<div class="log-empty">// aún no hay SKUs descontados</div>';
+        return;
+      }
+
+      stockGrid.innerHTML = items.map((item) => `
+        <div class="stock-item">
+          <div class="stock-sku">SKU: ${item.sku}</div>
+          <div class="stock-value">${item.stock}</div>
+        </div>
+      `).join('');
+    } catch (e) {
+      stockGrid.innerHTML = `<div class="log-empty">// no se pudo consultar stock (${e.message})</div>`;
+    }
   }
 
   // ── UI helpers ──

@@ -109,3 +109,19 @@ async def listar_ordenes():
         return resp.json()
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"Writer service no disponible: {exc}")
+
+
+@app.get(
+    "/inventory/stock",
+    tags=["Inventory"],
+    summary="Consultar stock actual desde inventory-service",
+)
+async def get_inventory_stock():
+    """Proxy a GET /internal/stock del inventory-service."""
+    try:
+        url = f"{settings.inventory_service_url}/internal/stock"
+        resp = await app.state.http.get(url, timeout=5.0)
+        resp.raise_for_status()
+        return resp.json()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Inventory service no disponible: {exc}")
