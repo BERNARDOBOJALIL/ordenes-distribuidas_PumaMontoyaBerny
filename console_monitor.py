@@ -20,7 +20,7 @@ from urllib.request import Request, urlopen
 
 
 GATEWAY_BASE_URL = "http://localhost:8000"
-WRITER_BASE_URL = "http://localhost:8001"
+WRITER_BASE_URL = "http://localhost:7000"
 
 
 @dataclass
