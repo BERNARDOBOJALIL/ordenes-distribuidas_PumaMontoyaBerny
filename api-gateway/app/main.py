@@ -125,3 +125,40 @@ async def get_inventory_stock():
         return resp.json()
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"Inventory service no disponible: {exc}")
+
+
+# ─── Productos ────────────────────────────────────────────────────────────────
+@app.get(
+    "/products",
+    tags=["Productos"],
+    summary="Listar todos los productos",
+)
+async def listar_productos():
+    """Proxy a GET /internal/products del writer-service."""
+    try:
+        url = f"{settings.writer_service_url}/internal/products"
+        resp = await app.state.http.get(url, timeout=5.0)
+        resp.raise_for_status()
+        return resp.json()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Writer service no disponible: {exc}")
+
+
+@app.get(
+    "/products/{sku}",
+    tags=["Productos"],
+    summary="Obtener producto por SKU",
+)
+async def obtener_producto(sku: str):
+    """Proxy a GET /internal/products/{sku} del writer-service."""
+    try:
+        url = f"{settings.writer_service_url}/internal/products/{sku}"
+        resp = await app.state.http.get(url, timeout=5.0)
+        if resp.status_code == 404:
+            raise HTTPException(status_code=404, detail=f"Producto {sku} no encontrado")
+        resp.raise_for_status()
+        return resp.json()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Writer service no disponible: {exc}")

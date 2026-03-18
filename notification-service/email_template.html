@@ -1,0 +1,87 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+</head>
+<body style="margin:0;padding:0;background:#f4f4f7;font-family:Arial,Helvetica,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f7;padding:32px 0;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+          
+          <!-- Header -->
+          <tr>
+            <td style="background:#2563eb;padding:24px 32px;text-align:center;">
+              <h1 style="margin:0;color:#ffffff;font-size:24px;">📦 Confirmación de Orden</h1>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding:32px;">
+              <p style="font-size:16px;color:#333;">
+                Hola <strong>{{customer_name}}</strong>,
+              </p>
+              <p style="font-size:15px;color:#555;">
+                Tu orden ha sido recibida y está siendo procesada.
+              </p>
+
+              <!-- Order info -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin:20px 0;background:#f9fafb;border-radius:6px;padding:16px;">
+                <tr>
+                  <td style="padding:8px 16px;">
+                    <strong style="color:#333;">Order ID:</strong>
+                    <span style="color:#2563eb;font-family:monospace;">{{order_id}}</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:8px 16px;">
+                    <strong style="color:#333;">Fecha:</strong>
+                    <span style="color:#555;">{{created_at}}</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:8px 16px;">
+                    <strong style="color:#333;">Líneas de productos:</strong>
+                    <span style="color:#555;">{{items_count}}</span>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Items table -->
+              <h3 style="color:#333;margin-bottom:8px;">Detalle de productos</h3>
+              <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+                <thead>
+                  <tr style="background:#2563eb;color:#fff;">
+                    <th style="padding:10px 12px;text-align:left;border:1px solid #2563eb;">SKU</th>
+                    <th style="padding:10px 12px;text-align:center;border:1px solid #2563eb;">Cantidad</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {{{items_html}}}
+                </tbody>
+              </table>
+
+              <p style="font-size:14px;color:#888;margin-top:24px;">
+                Si tienes dudas sobre tu pedido, responde a este correo.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background:#f4f4f7;padding:16px 32px;text-align:center;">
+              <p style="margin:0;font-size:12px;color:#999;">
+                Órdenes Distribuidas — Puma Montoya Berny &copy; 2026
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

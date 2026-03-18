@@ -24,7 +24,9 @@ from fastapi import FastAPI, Header, Request
 from .config import settings
 from .db import AsyncSessionLocal, init_db
 from .repositories.orders_repo import upsert_order, get_all_orders
-from .schemas import InternalOrder
+from .repositories.products_repo import get_all_products, get_product_by_sku, reduce_stock, validate_stock
+from .schemas import InternalOrder, ProductResponse
+from .seed import seed_products_if_empty
 
 # ─── Logging ──────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -64,7 +66,9 @@ async def lifespan(app: FastAPI):
     # startup
     await init_db()
     app.state.redis = aioredis.from_url(settings.redis_url, decode_responses=True)
-    logger.info("[App] DB tables ready. Redis connected.")
+    async with AsyncSessionLocal() as session:
+        await seed_products_if_empty(session)
+    logger.info("[App] DB tables ready. Redis connected. Seed checked.")
     yield
     # shutdown
     await app.state.redis.aclose()
@@ -115,6 +119,14 @@ async def persist_order(
         request_id,
     )
 
+    # ── Validación de stock ────────────────────────────────────────────────────
+    try:
+        async with AsyncSessionLocal() as val_session:
+            await validate_stock(val_session, [item.model_dump() for item in payload.items])
+    except ValueError as exc:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=422, detail={"stock_errors": list(exc.args[0])})
+
     try:
         async with AsyncSessionLocal() as session:
             order, created = await upsert_order(
@@ -125,6 +137,10 @@ async def persist_order(
             )
 
         if created:
+            # Descontar stock de la tabla products
+            async with AsyncSessionLocal() as stock_session:
+                await reduce_stock(stock_session, [item.model_dump() for item in payload.items])
+
             event = {
                 "event_type": "order.created",
                 "order_id": payload.order_id,
@@ -182,3 +198,31 @@ async def list_orders(request: Request):
         }
         for o in orders
     ]
+
+
+# ─── Products ─────────────────────────────────────────────────────────────────
+@app.get(
+    "/internal/products",
+    response_model=list[ProductResponse],
+    tags=["Internal"],
+    summary="Lista todos los productos",
+)
+async def list_products():
+    async with AsyncSessionLocal() as session:
+        products = await get_all_products(session)
+    return products
+
+
+@app.get(
+    "/internal/products/{sku}",
+    response_model=ProductResponse,
+    tags=["Internal"],
+    summary="Obtiene un producto por SKU",
+)
+async def get_product(sku: str):
+    from fastapi import HTTPException
+    async with AsyncSessionLocal() as session:
+        product = await get_product_by_sku(session, sku)
+    if not product:
+        raise HTTPException(status_code=404, detail=f"Producto {sku} no encontrado")
+    return product

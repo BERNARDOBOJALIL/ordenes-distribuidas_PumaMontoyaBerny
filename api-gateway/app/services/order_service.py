@@ -53,6 +53,13 @@ async def send_to_writer(
             if resp.status_code == 201:
                 logger.info("[send_to_writer] ✓ Writer returned 201 for order_id=%s", order_id)
                 return "RECEIVED"
+            if 400 <= resp.status_code < 500:
+                # Error de negocio (ej. stock insuficiente) — propagar al cliente sin reintentar
+                from fastapi import HTTPException
+                raise HTTPException(
+                    status_code=resp.status_code,
+                    detail=resp.json().get("detail", resp.text),
+                )
             last_error = Exception(f"Writer returned {resp.status_code}")
         except (httpx.TimeoutException, httpx.ConnectError) as exc:
             last_error = exc
