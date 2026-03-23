@@ -61,22 +61,93 @@ async def root():
 )
 async def crear_orden(orden: OrderCreate):
     """
-    1. Genera order_id (UUID) y X-Request-Id.
-    2. HSET order:{id} status=RECEIVED en Redis.
-    3. POST /internal/orders al writer-service (timeout 1 s, 1 retry).
-    4. Si writer falla → HSET status=FAILED.
-    5. Retorna 202 {order_id, status=RECEIVED}.
+    1. Valida stock disponible con inventory-service.
+    2. Genera order_id (UUID) y X-Request-Id.
+    3. HSET order:{id} status=RECEIVED en Redis.
+    4. POST /internal/orders al writer-service (timeout 1 s, 1 retry).
+    5. Si writer confirma → descuenta stock.
+    6. Retorna 202 {order_id, status=RECEIVED}.
     """
-    order_id = str(uuid.uuid4())
     items_dicts = [item.model_dump() for item in orden.items]
 
-    await send_to_writer(
+    # ── Validar stock antes de procesar ──
+    try:
+        stock_resp = await app.state.http.post(
+            f"{settings.inventory_service_url}/internal/stock/check",
+            json={"items": items_dicts},
+            timeout=5.0,
+        )
+        stock_resp.raise_for_status()
+        stock_data = stock_resp.json()
+        if not stock_data["all_available"]:
+            insufficient = [
+                f"{d['sku']} (pedido: {d['requested']}, disponible: {d['available']})"
+                for d in stock_data["details"]
+                if not d["sufficient"]
+            ]
+            raise HTTPException(
+                status_code=409,
+                detail=f"Stock insuficiente para: {', '.join(insufficient)}",
+            )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning("[crear_orden] stock check failed: %s", exc)
+        raise HTTPException(status_code=503, detail=f"Inventory service no disponible: {exc}")
+
+    order_id = str(uuid.uuid4())
+
+    status = await send_to_writer(
         app.state.http,
         app.state.redis,
         order_id=order_id,
         customer=orden.customer,
         items=items_dicts,
     )
+
+    # Fire-and-forget: notificar al notifications-service
+    if status != "FAILED":
+        # Descontar stock
+        try:
+            await app.state.http.post(
+                f"{settings.inventory_service_url}/internal/stock/decrease",
+                json={"items": items_dicts},
+                timeout=5.0,
+            )
+        except Exception as exc:
+            logger.warning("[crear_orden] stock decrease failed: %s", exc)
+
+        try:
+            await app.state.http.post(
+                f"{settings.notifications_service_url}/internal/notifications",
+                json={
+                    "order_id": order_id,
+                    "customer": orden.customer,
+                    "event_type": "order.created",
+                    "message": f"Orden {order_id} creada para {orden.customer}",
+                    "reason": "Pedido confirmado exitosamente",
+                    "items": items_dicts,
+                },
+                timeout=5.0,
+            )
+        except Exception as exc:
+            logger.warning("[crear_orden] notification failed: %s", exc)
+    else:
+        try:
+            await app.state.http.post(
+                f"{settings.notifications_service_url}/internal/notifications",
+                json={
+                    "order_id": order_id,
+                    "customer": orden.customer,
+                    "event_type": "order.failed",
+                    "message": f"Orden {order_id} falló para {orden.customer}",
+                    "reason": "No se pudo persistir la orden: el writer-service no respondió o devolvió un error",
+                    "items": items_dicts,
+                },
+                timeout=5.0,
+            )
+        except Exception as exc:
+            logger.warning("[crear_orden] notification (failed order) failed: %s", exc)
 
     return OrderAccepted(order_id=order_id, status="RECEIVED")
 
@@ -109,3 +180,90 @@ async def listar_ordenes():
         return resp.json()
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"Writer service no disponible: {exc}")
+
+
+# ─── Notificaciones ───────────────────────────────────────────────────────────
+@app.get(
+    "/notifications",
+    tags=["Notificaciones"],
+    summary="Listar todas las notificaciones",
+)
+async def listar_notificaciones():
+    """Proxy a GET /internal/notifications del notifications-service."""
+    try:
+        url = f"{settings.notifications_service_url}/internal/notifications"
+        resp = await app.state.http.get(url, timeout=5.0)
+        resp.raise_for_status()
+        return resp.json()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Notifications service no disponible: {exc}")
+
+
+@app.get(
+    "/notifications/{order_id}",
+    tags=["Notificaciones"],
+    summary="Notificaciones de una orden específica",
+)
+async def notificaciones_por_orden(order_id: str):
+    """Proxy a GET /internal/notifications/{order_id} del notifications-service."""
+    try:
+        url = f"{settings.notifications_service_url}/internal/notifications/{order_id}"
+        resp = await app.state.http.get(url, timeout=5.0)
+        resp.raise_for_status()
+        return resp.json()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Notifications service no disponible: {exc}")
+
+
+# ─── Productos / Inventario ───────────────────────────────────────────────────
+@app.get(
+    "/products",
+    tags=["Productos"],
+    summary="Listar todos los productos",
+)
+async def listar_productos():
+    """Proxy a GET /internal/products del inventory-service."""
+    try:
+        url = f"{settings.inventory_service_url}/internal/products"
+        resp = await app.state.http.get(url, timeout=5.0)
+        resp.raise_for_status()
+        return resp.json()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Inventory service no disponible: {exc}")
+
+
+@app.get(
+    "/products/{sku}",
+    tags=["Productos"],
+    summary="Obtener producto por SKU",
+)
+async def obtener_producto(sku: str):
+    """Proxy a GET /internal/products/{sku} del inventory-service."""
+    try:
+        url = f"{settings.inventory_service_url}/internal/products/{sku}"
+        resp = await app.state.http.get(url, timeout=5.0)
+        if resp.status_code == 404:
+            raise HTTPException(status_code=404, detail=f"Producto {sku} no encontrado")
+        resp.raise_for_status()
+        return resp.json()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Inventory service no disponible: {exc}")
+
+
+@app.get(
+    "/inventory/stock",
+    tags=["Productos"],
+    summary="Listar stock de todos los productos",
+)
+async def listar_stock():
+    """Proxy a GET /internal/products — devuelve sku, name, stock."""
+    try:
+        url = f"{settings.inventory_service_url}/internal/products"
+        resp = await app.state.http.get(url, timeout=5.0)
+        resp.raise_for_status()
+        products = resp.json()
+        return [{"sku": p["sku"], "name": p["name"], "stock": p["stock"], "price": p["price"]} for p in products]
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Inventory service no disponible: {exc}")

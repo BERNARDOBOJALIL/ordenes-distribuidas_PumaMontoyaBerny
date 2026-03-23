@@ -3,17 +3,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     # PostgreSQL — asyncpg driver
-    database_url: str = (
-        "postgresql+asyncpg://orders_user:orders_pass@postgres:5432/orders_db"
+    inventory_database_url: str = (
+        "postgresql+asyncpg://inventory_user:inventory_pass@postgres-inventory:5432/inventory_db"
     )
 
     # Redis
     redis_url: str = "redis://redis:6379/0"
-
-    # RabbitMQ
-    amqp_url: str = "amqp://guest:guest@rabbitmq:5672/"
-    rabbitmq_exchange: str = "orders.events"
-    order_created_routing_key: str = "order.created"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

@@ -11,10 +11,12 @@ Flow
 api-gateway  →  POST /internal/orders  →  PostgreSQL + Redis hash update
 """
 
+import json
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
+import pika
 import redis.asyncio as aioredis
 from fastapi import FastAPI, Header, Request
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,6 +32,36 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger("writer-service")
+
+
+# ─── RabbitMQ helper ──────────────────────────────────────────────────────────
+def publish_order_event(order_id: str, customer: str, items: list[dict]) -> None:
+    """Publish an order.created event to RabbitMQ (blocking, short-lived)."""
+    try:
+        params = pika.URLParameters(settings.amqp_url)
+        connection = pika.BlockingConnection(params)
+        channel = connection.channel()
+        channel.exchange_declare(
+            exchange=settings.rabbitmq_exchange,
+            exchange_type="topic",
+            durable=True,
+        )
+        body = json.dumps({
+            "order_id": order_id,
+            "customer": customer,
+            "items": items,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
+        channel.basic_publish(
+            exchange=settings.rabbitmq_exchange,
+            routing_key=settings.order_created_routing_key,
+            body=body,
+            properties=pika.BasicProperties(content_type="application/json"),
+        )
+        connection.close()
+        logger.info("[RabbitMQ] ✓ Published order.created for order_id=%s", order_id)
+    except Exception as exc:
+        logger.warning("[RabbitMQ] ⚠ Failed to publish for order_id=%s: %s", order_id, exc)
 
 
 # ─── Lifecycle ────────────────────────────────────────────────────────────────
@@ -108,6 +140,15 @@ async def persist_order(
             "Created" if created else "Already existed",
             payload.order_id,
         )
+
+        # Publish event to RabbitMQ
+        if created:
+            publish_order_event(
+                payload.order_id,
+                payload.customer,
+                [item.model_dump() for item in payload.items],
+            )
+
         return {"order_id": payload.order_id, "status": "PERSISTED", "created": created}
 
     except Exception as exc:

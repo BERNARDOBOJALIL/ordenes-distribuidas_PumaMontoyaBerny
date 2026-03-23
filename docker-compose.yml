@@ -1,4 +1,16 @@
 services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+      start_period: 15s
+
   postgres:
     image: postgres:16-alpine
     environment:
@@ -33,6 +45,8 @@ services:
         condition: service_healthy
       writer-service:
         condition: service_started
+      inventory-service:
+        condition: service_started
 
   writer-service:
     build: ./writer-service
@@ -44,6 +58,58 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  postgres-inventory:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${INVENTORY_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${INVENTORY_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${INVENTORY_POSTGRES_DB}
+    volumes:
+      - pg_inventory_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${INVENTORY_POSTGRES_USER} -d ${INVENTORY_POSTGRES_DB}"]
+      interval: 5s
+      retries: 5
+
+  inventory-service:
+    build: ./inventory-service
+    ports:
+      - "8002:8002"
+    env_file: .env
+    depends_on:
+      postgres-inventory:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  postgres-notifications:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${NOTIFICATIONS_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${NOTIFICATIONS_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${NOTIFICATIONS_POSTGRES_DB}
+    volumes:
+      - pg_notifications_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${NOTIFICATIONS_POSTGRES_USER} -d ${NOTIFICATIONS_POSTGRES_DB}"]
+      interval: 5s
+      retries: 5
+
+  notifications-service:
+    build: ./notifications-service
+    ports:
+      - "8003:8003"
+    env_file: .env
+    depends_on:
+      postgres-notifications:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
 
   frontend:
     build: ./Frontend
@@ -54,3 +120,5 @@ services:
 
 volumes:
   pg_data:
+  pg_inventory_data:
+  pg_notifications_data:

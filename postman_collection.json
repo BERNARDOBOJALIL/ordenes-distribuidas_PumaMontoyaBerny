@@ -1,0 +1,216 @@
+{
+  "info": {
+    "name": "Ordenes Distribuidas",
+    "description": "Colección para verificar el sistema distribuido de órdenes con notificaciones",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000"
+    },
+    {
+      "key": "order_id",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Health Checks",
+      "item": [
+        {
+          "name": "API Gateway Health",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/"
+          }
+        },
+        {
+          "name": "Writer Service Health",
+          "request": {
+            "method": "GET",
+            "url": "http://localhost:8001/"
+          }
+        },
+        {
+          "name": "Notifications Service Health",
+          "request": {
+            "method": "GET",
+            "url": "http://localhost:8003/"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Órdenes",
+      "item": [
+        {
+          "name": "Crear Orden",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "pm.collectionVariables.set('order_id', jsonData.order_id);",
+                  "pm.test('Status 202', function () {",
+                  "    pm.response.to.have.status(202);",
+                  "});",
+                  "pm.test('Has order_id', function () {",
+                  "    pm.expect(jsonData.order_id).to.be.a('string');",
+                  "});",
+                  "pm.test('Status is RECEIVED', function () {",
+                  "    pm.expect(jsonData.status).to.eql('RECEIVED');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer\": \"Berny Puma Montoya\",\n  \"items\": [\n    { \"sku\": \"LAPTOP-01\", \"qty\": 1 },\n    { \"sku\": \"MOUSE-01\", \"qty\": 2 }\n  ]\n}"
+            },
+            "url": "{{base_url}}/orders"
+          }
+        },
+        {
+          "name": "Consultar Estado Orden",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "pm.test('Status is PERSISTED', function () {",
+                  "    pm.expect(jsonData.status).to.eql('PERSISTED');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/orders/{{order_id}}"
+          }
+        },
+        {
+          "name": "Listar Todas las Órdenes",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Response is array', function () {",
+                  "    pm.expect(pm.response.json()).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/orders"
+          }
+        },
+        {
+          "name": "Crear Orden (Idempotencia - misma orden)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 202', function () {",
+                  "    pm.response.to.have.status(202);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer\": \"Test Idempotencia\",\n  \"items\": [\n    { \"sku\": \"SSD-01\", \"qty\": 1 }\n  ]\n}"
+            },
+            "url": "{{base_url}}/orders"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Notificaciones",
+      "item": [
+        {
+          "name": "Listar Todas las Notificaciones",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Response is array', function () {",
+                  "    pm.expect(pm.response.json()).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/notifications"
+          }
+        },
+        {
+          "name": "Notificaciones por Orden",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Response is array', function () {",
+                  "    pm.expect(pm.response.json()).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/notifications/{{order_id}}"
+          }
+        }
+      ]
+    }
+  ]
+}
