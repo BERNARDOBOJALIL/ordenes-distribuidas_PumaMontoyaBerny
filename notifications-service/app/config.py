@@ -13,6 +13,9 @@ class Settings(BaseSettings):
 
     # RabbitMQ
     amqp_url: str = "amqp://guest:guest@rabbitmq:5672/"
+    rabbitmq_exchange: str = "orders.events"
+    order_created_routing_key: str = "order.created"
+    notifications_queue_name: str = "notifications.queue"
 
     # EmailJS
     emailjs_service_id: str = ""

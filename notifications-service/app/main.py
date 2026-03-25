@@ -1,13 +1,15 @@
 """
-Notifications Service — internal persistence + email notification microservice.
+Notifications Service — listens to RabbitMQ order events, persists notifications, sends emails.
 
 Responsibilities
 ----------------
-- POST /internal/notifications : persists notification in PostgreSQL + sends email via EmailJS.
-- GET  /internal/notifications : lists all notifications.
-- GET  /internal/notifications/{order_id} : notifications for a specific order.
+- Consumes 'order.created' events from RabbitMQ
+- Persists notifications in PostgreSQL
+- Sends email confirmations via EmailJS
+- Exposes internal endpoints for querying notifications
 """
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -23,6 +25,7 @@ from .repositories.notifications_repo import (
 )
 from .schemas import NotificationCreate, NotificationResponse
 from .services.email_service import send_email_notification
+from .services.rabbitmq_consumer import RabbitMQConsumer, handle_order_created_event
 
 # ─── Logging ──────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -39,8 +42,28 @@ async def lifespan(app: FastAPI):
     await init_db()
     app.state.redis = aioredis.from_url(settings.redis_url, decode_responses=True)
     logger.info("[App] DB tables ready. Redis connected.")
+
+    # Initialize RabbitMQ consumer
+    consumer = RabbitMQConsumer()
+    await consumer.connect()
+    
+    # Start consuming in background task
+    consumer_task = asyncio.create_task(
+        consumer.start_consuming(handle_order_created_event)
+    )
+    app.state.consumer = consumer
+    app.state.consumer_task = consumer_task
+    logger.info("[App] RabbitMQ consumer started.")
+
     yield
+
     # shutdown
+    consumer_task.cancel()
+    try:
+        await consumer_task
+    except asyncio.CancelledError:
+        pass
+    await consumer.close()
     await app.state.redis.aclose()
     logger.info("[App] Shutdown complete.")
 
