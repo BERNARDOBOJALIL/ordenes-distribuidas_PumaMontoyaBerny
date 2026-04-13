@@ -1,0 +1,31 @@
+services:
+  rabbitmq:
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  postgres:
+    ports:
+      - "5432:5432"
+
+  redis:
+    ports:
+      - "6379:6379"
+
+  api-gateway:
+    ports:
+      - "8000:8000"
+    environment:
+      - LOG_LEVEL=DEBUG
+
+  order-service:
+    ports:
+      - "7000:7001"
+
+  inventory-service:
+    ports:
+      - "8002:8002"
+
+  frontend:
+    ports:
+      - "3000:80"
