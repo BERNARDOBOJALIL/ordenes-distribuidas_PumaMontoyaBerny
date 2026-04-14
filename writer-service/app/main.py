@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 import pika
 import redis.asyncio as aioredis
 from fastapi import FastAPI, Header, Request
+from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
 from .db import AsyncSessionLocal, init_db
@@ -85,6 +86,13 @@ app = FastAPI(
     ),
     version="1.0.0",
     lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
