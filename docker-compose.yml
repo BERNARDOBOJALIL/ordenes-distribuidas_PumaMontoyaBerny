@@ -31,6 +31,8 @@ services:
   api-gateway:
     build: ./api-gateway
     env_file: ${ENV_FILE:-.env.dev}
+    ports:
+      - "8000:8000"
     depends_on:
       redis:
         condition: service_healthy
@@ -40,6 +42,8 @@ services:
   order-service:
     build: ./writer-service
     env_file: ${ENV_FILE:-.env.dev}
+    ports:
+      - "8001:7001"
     depends_on:
       postgres:
         condition: service_healthy
@@ -51,6 +55,8 @@ services:
   inventory-service:
     build: ./inventory-service
     env_file: ${ENV_FILE:-.env.dev}
+    ports:
+      - "8002:8002"
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -71,6 +77,8 @@ services:
 
   frontend:
     build: ./Frontend
+    ports:
+      - "3000:80"
     depends_on:
       - api-gateway
 

@@ -51,7 +51,7 @@ Builder recomendado: Dockerfile (cada carpeta ya tiene su Dockerfile).
 Variables exactas que debo cargar en Railway para `api-gateway`:
 
 ```env
-WRITER_SERVICE_URL=http://${{writer-service.RAILWAY_PRIVATE_DOMAIN}}:8001
+WRITER_SERVICE_URL=http://${{writer-service.RAILWAY_PRIVATE_DOMAIN}}:7001
 INVENTORY_SERVICE_URL=https://inventory-service-xxxx.up.railway.app
 NOTIFICATIONS_SERVICE_URL=https://notifications-service-xxxx.up.railway.app
 REDIS_URL=${{Redis.REDIS_URL}}
