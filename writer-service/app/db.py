@@ -9,11 +9,11 @@ from .config import settings
 
 def normalize_database_url(raw_url: str) -> str:
     if raw_url.startswith("postgres://"):
-        return raw_url.replace("postgres://", "postgresql://", 1)
-    if raw_url.startswith("postgresql+asyncpg://"):
-        return raw_url.replace("postgresql+asyncpg://", "postgresql://", 1)
+        return raw_url.replace("postgres://", "postgresql+asyncpg://", 1)
+    if raw_url.startswith("postgresql://"):
+        return raw_url.replace("postgresql://", "postgresql+asyncpg://", 1)
     if raw_url.startswith("postgresql+psycopg2://"):
-        return raw_url.replace("postgresql+psycopg2://", "postgresql://", 1)
+        return raw_url.replace("postgresql+psycopg2://", "postgresql+asyncpg://", 1)
     return raw_url
 
 engine = create_async_engine(
