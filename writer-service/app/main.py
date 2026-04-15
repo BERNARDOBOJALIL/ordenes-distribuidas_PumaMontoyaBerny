@@ -19,12 +19,12 @@ from datetime import datetime, timezone
 
 import pika
 import redis.asyncio as aioredis
-from fastapi import FastAPI, Header, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
 from .db import AsyncSessionLocal, init_db
-from .repositories.orders_repo import upsert_order, get_all_orders
+from .repositories.orders_repo import get_all_orders, get_all_orders_by_user, upsert_order
 from .repositories.products_repo import get_all_products, get_product_by_sku, reduce_stock, validate_stock
 from .schemas import InternalOrder, ProductResponse
 from .seed import seed_products_if_empty
@@ -35,6 +35,11 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger("writer-service")
+
+
+def require_internal_service_key(x_service_key: str = Header(default="")) -> None:
+    if x_service_key != settings.internal_service_key:
+        raise HTTPException(status_code=403, detail="Invalid internal service key")
 
 
 def publish_order_created_event(event: dict) -> None:
@@ -113,6 +118,7 @@ async def persist_order(
     payload: InternalOrder,
     request: Request,
     x_request_id: str = Header(default=""),
+    _: None = Depends(require_internal_service_key),
 ):
     """
     Receives an order from the api-gateway, inserts it into PostgreSQL
@@ -132,7 +138,6 @@ async def persist_order(
         async with AsyncSessionLocal() as val_session:
             await validate_stock(val_session, [item.model_dump() for item in payload.items])
     except ValueError as exc:
-        from fastapi import HTTPException
         raise HTTPException(status_code=422, detail={"stock_errors": list(exc.args[0])})
 
     try:
@@ -140,6 +145,7 @@ async def persist_order(
             order, created = await upsert_order(
                 session,
                 order_id=payload.order_id,
+                user_id=payload.user_id,
                 customer=payload.customer,
                 items=[item.model_dump() for item in payload.items],
             )
@@ -152,6 +158,7 @@ async def persist_order(
             event = {
                 "event_type": "order.created",
                 "order_id": payload.order_id,
+                "user_id": payload.user_id,
                 "customer": payload.customer,
                 "items": [item.model_dump() for item in payload.items],
                 "created_at": order.created_at.isoformat() if order.created_at else datetime.now(timezone.utc).isoformat(),
@@ -192,14 +199,19 @@ async def persist_order(
     tags=["Internal"],
     summary="Lista todas las órdenes desde PostgreSQL",
 )
-async def list_orders(request: Request):
+async def list_orders(request: Request, _: None = Depends(require_internal_service_key)):
     """Devuelve todas las órdenes guardadas en PostgreSQL."""
+    user_id = request.query_params.get("user_id")
     import json as _json
     async with AsyncSessionLocal() as session:
-        orders = await get_all_orders(session)
+        if user_id:
+            orders = await get_all_orders_by_user(session, user_id)
+        else:
+            orders = await get_all_orders(session)
     return [
         {
             "order_id": o.order_id,
+            "user_id": o.user_id,
             "customer": o.customer,
             "items": _json.loads(o.items),
             "created_at": o.created_at.isoformat() if o.created_at else None,
@@ -215,7 +227,7 @@ async def list_orders(request: Request):
     tags=["Internal"],
     summary="Lista todos los productos",
 )
-async def list_products():
+async def list_products(_: None = Depends(require_internal_service_key)):
     async with AsyncSessionLocal() as session:
         products = await get_all_products(session)
     return products
@@ -227,8 +239,7 @@ async def list_products():
     tags=["Internal"],
     summary="Obtiene un producto por SKU",
 )
-async def get_product(sku: str):
-    from fastapi import HTTPException
+async def get_product(sku: str, _: None = Depends(require_internal_service_key)):
     async with AsyncSessionLocal() as session:
         product = await get_product_by_sku(session, sku)
     if not product:

@@ -17,8 +17,10 @@ async def send_to_writer(
     http_client: httpx.AsyncClient,
     redis,
     order_id: str,
+    user_id: str,
     customer: str,
     items: list[dict],
+    service_key: str,
 ) -> str:
     """
     1. HSET order:{id} status=RECEIVED in Redis.
@@ -32,11 +34,14 @@ async def send_to_writer(
     # ① Mark RECEIVED in Redis
     await redis.hset(
         f"order:{order_id}",
-        mapping={"status": "RECEIVED", "last_update": now},
+        mapping={"status": "RECEIVED", "last_update": now, "user_id": user_id},
     )
 
-    payload = {"order_id": order_id, "customer": customer, "items": items}
-    headers = {"X-Request-Id": request_id}
+    payload = {"order_id": order_id, "user_id": user_id, "customer": customer, "items": items}
+    headers = {
+        "X-Request-Id": request_id,
+        "X-Service-Key": service_key,
+    }
     url = f"{settings.writer_service_url}/internal/orders"
     timeout = httpx.Timeout(settings.writer_timeout_seconds)
 

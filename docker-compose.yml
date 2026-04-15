@@ -38,6 +38,19 @@ services:
         condition: service_healthy
       order-service:
         condition: service_started
+      auth-service:
+        condition: service_started
+
+  auth-service:
+    build: ./auth-service
+    env_file: ${ENV_FILE:-.env.dev}
+    ports:
+      - "8003:7000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   order-service:
     build: ./writer-service

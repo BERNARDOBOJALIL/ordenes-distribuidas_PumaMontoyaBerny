@@ -9,6 +9,7 @@ from ..models import Order
 async def upsert_order(
     session: AsyncSession,
     order_id: str,
+    user_id: str,
     customer: str,
     items: list[dict],
 ) -> tuple[Order, bool]:
@@ -23,6 +24,7 @@ async def upsert_order(
 
     order = Order(
         order_id=order_id,
+        user_id=user_id,
         customer=customer,
         items=json.dumps(items),
     )
@@ -44,5 +46,14 @@ async def get_all_orders(session: AsyncSession) -> list[Order]:
     """Return all orders ordered by created_at descending."""
     result = await session.execute(
         select(Order).order_by(Order.created_at.desc())
+    )
+    return list(result.scalars().all())
+
+
+async def get_all_orders_by_user(session: AsyncSession, user_id: str) -> list[Order]:
+    result = await session.execute(
+        select(Order)
+        .where(Order.user_id == user_id)
+        .order_by(Order.created_at.desc())
     )
     return list(result.scalars().all())

@@ -4,11 +4,20 @@ from contextlib import asynccontextmanager
 
 import httpx
 import redis.asyncio as aioredis
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from .config import settings
-from .schemas import OrderAccepted, OrderCreate, OrderStatus
+from .schemas import (
+    LoginRequest,
+    LogoutRequest,
+    OrderAccepted,
+    OrderCreate,
+    OrderStatus,
+    RefreshRequest,
+    TokenResponse,
+)
 from .services.order_service import get_order_status, send_to_writer
 
 logger = logging.getLogger("api-gateway")
@@ -39,16 +48,120 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=settings.cors_origins,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Authorization", "Content-Type", "X-Request-Id", "X-Service-Key"],
 )
+
+
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    public_routes = {
+        "/",
+        "/docs",
+        "/openapi.json",
+        "/redoc",
+        "/login",
+        "/refresh",
+    }
+    if request.url.path in public_routes:
+        return await call_next(request)
+
+    if request.method == "OPTIONS":
+        return await call_next(request)
+
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return JSONResponse(status_code=401, content={"detail": "Falta token Bearer"})
+
+    token = auth_header.split(" ", 1)[1].strip()
+    try:
+        verify_url = f"{settings.auth_service_url}/internal/auth/verify"
+        verify_resp = await request.app.state.http.post(
+            verify_url,
+            json={"access_token": token},
+            headers={"X-Service-Key": settings.internal_service_key},
+            timeout=5.0,
+        )
+        if verify_resp.status_code == 401:
+            return JSONResponse(status_code=401, content={"detail": "Token invalido o expirado"})
+        verify_resp.raise_for_status()
+
+        verify_data = verify_resp.json()
+        request.state.user_id = verify_data["user_id"]
+        request.state.access_token = token
+    except httpx.HTTPStatusError:
+        return JSONResponse(status_code=503, content={"detail": "Auth service no disponible"})
+    except Exception:
+        return JSONResponse(status_code=503, content={"detail": "Auth service no disponible"})
+
+    return await call_next(request)
 
 
 # ─── Gateway / Health ─────────────────────────────────────────────────────────
 @app.get("/", tags=["Gateway"])
 async def root():
     return {"gateway": "API Gateway activo", "version": "1.0.0", "docs": "/docs"}
+
+
+@app.post("/login", response_model=TokenResponse, tags=["Auth"], summary="Login de usuario")
+async def login(payload: LoginRequest):
+    try:
+        url = f"{settings.auth_service_url}/internal/auth/login"
+        resp = await app.state.http.post(
+            url,
+            json=payload.model_dump(),
+            headers={"X-Service-Key": settings.internal_service_key},
+            timeout=5.0,
+        )
+        if resp.status_code == 401:
+            raise HTTPException(status_code=401, detail="Credenciales invalidas")
+        resp.raise_for_status()
+        return resp.json()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Auth service no disponible: {exc}")
+
+
+@app.post("/refresh", response_model=TokenResponse, tags=["Auth"], summary="Renovar access token")
+async def refresh_tokens(payload: RefreshRequest):
+    try:
+        url = f"{settings.auth_service_url}/internal/auth/refresh"
+        resp = await app.state.http.post(
+            url,
+            json=payload.model_dump(),
+            headers={"X-Service-Key": settings.internal_service_key},
+            timeout=5.0,
+        )
+        if resp.status_code == 401:
+            raise HTTPException(status_code=401, detail="Refresh token invalido o expirado")
+        resp.raise_for_status()
+        return resp.json()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Auth service no disponible: {exc}")
+
+
+@app.post("/logout", tags=["Auth"], summary="Cerrar sesion y revocar token")
+async def logout(payload: LogoutRequest, request: Request):
+    token = getattr(request.state, "access_token", "")
+    if not token:
+        raise HTTPException(status_code=401, detail="Token invalido")
+
+    try:
+        url = f"{settings.auth_service_url}/internal/auth/logout"
+        resp = await app.state.http.post(
+            url,
+            json={"access_token": token, "refresh_token": payload.refresh_token},
+            headers={"X-Service-Key": settings.internal_service_key},
+            timeout=5.0,
+        )
+        resp.raise_for_status()
+        return resp.json()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Auth service no disponible: {exc}")
 
 
 # ─── Ordenes ──────────────────────────────────────────────────────────────────
@@ -59,7 +172,7 @@ async def root():
     tags=["Ordenes"],
     summary="Crear orden (202 Accepted)",
 )
-async def crear_orden(orden: OrderCreate):
+async def crear_orden(orden: OrderCreate, request: Request):
     """
     1. Genera order_id (UUID) y X-Request-Id.
     2. HSET order:{id} status=RECEIVED en Redis.
@@ -68,14 +181,17 @@ async def crear_orden(orden: OrderCreate):
     5. Retorna 202 {order_id, status=RECEIVED}.
     """
     order_id = str(uuid.uuid4())
+    user_id = request.state.user_id
     items_dicts = [item.model_dump() for item in orden.items]
 
     await send_to_writer(
         app.state.http,
         app.state.redis,
         order_id=order_id,
+        user_id=user_id,
         customer=orden.customer,
         items=items_dicts,
+        service_key=settings.internal_service_key,
     )
 
     return OrderAccepted(order_id=order_id, status="RECEIVED")
@@ -87,11 +203,15 @@ async def crear_orden(orden: OrderCreate):
     tags=["Ordenes"],
     summary="Consultar estado de una orden",
 )
-async def obtener_orden(order_id: str):
+async def obtener_orden(order_id: str, request: Request):
     """Lee HGETALL order:{order_id} desde Redis y devuelve el estado."""
     data = await get_order_status(app.state.redis, order_id)
     if not data:
         raise HTTPException(status_code=404, detail=f"Orden {order_id} no encontrada en Redis")
+
+    request_user_id = request.state.user_id
+    if data.get("user_id") != request_user_id:
+        raise HTTPException(status_code=404, detail=f"Orden {order_id} no encontrada")
     return data
 
 
@@ -100,11 +220,16 @@ async def obtener_orden(order_id: str):
     tags=["Ordenes"],
     summary="Listar todas las órdenes (desde PostgreSQL vía writer-service)",
 )
-async def listar_ordenes():
+async def listar_ordenes(request: Request):
     """Proxy a GET /internal/orders del writer-service."""
     try:
         url = f"{settings.writer_service_url}/internal/orders"
-        resp = await app.state.http.get(url, timeout=5.0)
+        resp = await app.state.http.get(
+            url,
+            params={"user_id": request.state.user_id},
+            headers={"X-Service-Key": settings.internal_service_key},
+            timeout=5.0,
+        )
         resp.raise_for_status()
         return resp.json()
     except Exception as exc:
@@ -137,7 +262,11 @@ async def listar_productos():
     """Proxy a GET /internal/products del writer-service."""
     try:
         url = f"{settings.writer_service_url}/internal/products"
-        resp = await app.state.http.get(url, timeout=5.0)
+        resp = await app.state.http.get(
+            url,
+            headers={"X-Service-Key": settings.internal_service_key},
+            timeout=5.0,
+        )
         resp.raise_for_status()
         return resp.json()
     except Exception as exc:
@@ -153,7 +282,11 @@ async def obtener_producto(sku: str):
     """Proxy a GET /internal/products/{sku} del writer-service."""
     try:
         url = f"{settings.writer_service_url}/internal/products/{sku}"
-        resp = await app.state.http.get(url, timeout=5.0)
+        resp = await app.state.http.get(
+            url,
+            headers={"X-Service-Key": settings.internal_service_key},
+            timeout=5.0,
+        )
         if resp.status_code == 404:
             raise HTTPException(status_code=404, detail=f"Producto {sku} no encontrado")
         resp.raise_for_status()

@@ -1,5 +1,9 @@
 # Environment
 .env
+.env.prod
+.env.dev
+.env.local
+.env.stagging
 
 # Python
 __pycache__/
@@ -28,3 +32,4 @@ Thumbs.db
 
 # Docker volumes
 pg_data/
+
