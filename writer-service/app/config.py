@@ -1,11 +1,10 @@
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    # PostgreSQL — asyncpg driver
-    database_url: str = (
-        "postgresql+asyncpg://orders_user:orders_pass@postgres:5432/orders_db"
-    )
+    # Required from env (DATABASE_URL)
+    database_url: str = Field(..., alias="DATABASE_URL")
 
     # Redis
     redis_url: str = "redis://redis:6379/0"

@@ -197,7 +197,7 @@ frontend:
 Se añadieron las variables de RabbitMQ y los nombres de las queues:
 
 ```diff
-  WRITER_SERVICE_URL=http://order-service:8001
+  WRITER_SERVICE_URL=http://order-service:7001
 + INVENTORY_SERVICE_URL=http://inventory-service:8002
 
 + AMQP_URL=amqp://guest:guest@rabbitmq:5672/%2F
@@ -311,14 +311,14 @@ Se añadió la URL del nuevo `inventory-service`:
 ```python
 # Antes
 class Settings(BaseSettings):
-    writer_service_url: str = "http://writer-service:8001"
+    writer_service_url: str = "http://writer-service:7001"
     redis_url: str = "redis://redis:6379"
     writer_timeout_seconds: float = 1.0
     writer_max_retries: int = 1
 
 # Ahora
 class Settings(BaseSettings):
-    writer_service_url: str = "http://writer-service:8001"
+    writer_service_url: str = "http://writer-service:7001"
     inventory_service_url: str = "http://inventory-service:8002"  # NUEVA
     redis_url: str = "redis://redis:6379"
     writer_timeout_seconds: float = 1.0
