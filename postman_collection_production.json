@@ -27,6 +27,147 @@
 			"name": "Authentication",
 			"item": [
 				{
+					"name": "Signup",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const response = pm.response.json();",
+									"    pm.collectionVariables.set('access_token', response.access_token);",
+									"    pm.collectionVariables.set('refresh_token', response.refresh_token);",
+									"    console.log('User registered and tokens saved to collection variables');",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"newuser\",\n    \"email\": \"newuser@example.com\",\n    \"password\": \"ChangeMe123!\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/signup",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"auth",
+								"signup"
+							]
+						},
+						"description": "Register a new user. Automatically logs in the user and saves access_token and refresh_token to collection variables. Returns 409 if username or email already exists."
+					},
+					"response": [
+						{
+							"name": "Success - 200 OK",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"username\": \"newuser\",\n    \"email\": \"newuser@example.com\",\n    \"password\": \"ChangeMe123!\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/auth/signup",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"auth",
+										"signup"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [],
+							"cookie": [],
+							"body": "{\n    \"access_token\": \"eyJ...\",\n    \"refresh_token\": \"...\",\n    \"token_type\": \"bearer\",\n    \"expires_in\": 900\n}"
+						},
+						{
+							"name": "Username Already Exists - 409",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"username\": \"admin\",\n    \"email\": \"other@example.com\",\n    \"password\": \"ChangeMe123!\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/auth/signup",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"auth",
+										"signup"
+									]
+								}
+							},
+							"status": "Conflict",
+							"code": 409,
+							"_postman_previewlanguage": "json",
+							"header": [],
+							"cookie": [],
+							"body": "{\n    \"detail\": \"Username ya existe\"\n}"
+						},
+						{
+							"name": "Email Already Exists - 409",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"username\": \"otheruser\",\n    \"email\": \"admin@example.com\",\n    \"password\": \"ChangeMe123!\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/auth/signup",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"auth",
+										"signup"
+									]
+								}
+							},
+							"status": "Conflict",
+							"code": 409,
+							"_postman_previewlanguage": "json",
+							"header": [],
+							"cookie": [],
+							"body": "{\n    \"detail\": \"Email ya existe\"\n}"
+						}
+					]
+				},
+				{
 					"name": "Login",
 					"event": [
 						{
@@ -57,11 +198,12 @@
 							"raw": "{\n    \"username\": \"admin\",\n    \"password\": \"ChangeMe123!\"\n}"
 						},
 						"url": {
-							"raw": "{{base_url}}/login",
+							"raw": "{{base_url}}/auth/login",
 							"host": [
 								"{{base_url}}"
 							],
 							"path": [
+								"auth",
 								"login"
 							]
 						},
@@ -83,11 +225,12 @@
 									"raw": "{\n    \"username\": \"admin\",\n    \"password\": \"ChangeMe123!\"\n}"
 								},
 								"url": {
-									"raw": "{{base_url}}/login",
+									"raw": "{{base_url}}/auth/login",
 									"host": [
 										"{{base_url}}"
 									],
 									"path": [
+										"auth",
 										"login"
 									]
 								}
@@ -114,11 +257,12 @@
 									"raw": "{\n    \"username\": \"admin\",\n    \"password\": \"wrongpassword\"\n}"
 								},
 								"url": {
-									"raw": "{{base_url}}/login",
+									"raw": "{{base_url}}/auth/login",
 									"host": [
 										"{{base_url}}"
 									],
 									"path": [
+										"auth",
 										"login"
 									]
 								}
@@ -163,11 +307,12 @@
 							"raw": "{\n    \"refresh_token\": \"{{refresh_token}}\"\n}"
 						},
 						"url": {
-							"raw": "{{base_url}}/refresh",
+							"raw": "{{base_url}}/auth/refresh",
 							"host": [
 								"{{base_url}}"
 							],
 							"path": [
+								"auth",
 								"refresh"
 							]
 						},
@@ -189,11 +334,12 @@
 									"raw": "{\n    \"refresh_token\": \"{{refresh_token}}\"\n}"
 								},
 								"url": {
-									"raw": "{{base_url}}/refresh",
+									"raw": "{{base_url}}/auth/refresh",
 									"host": [
 										"{{base_url}}"
 									],
 									"path": [
+										"auth",
 										"refresh"
 									]
 								}
@@ -220,11 +366,12 @@
 									"raw": "{\n    \"refresh_token\": \"invalid-token\"\n}"
 								},
 								"url": {
-									"raw": "{{base_url}}/refresh",
+									"raw": "{{base_url}}/auth/refresh",
 									"host": [
 										"{{base_url}}"
 									],
 									"path": [
+										"auth",
 										"refresh"
 									]
 								}
@@ -235,6 +382,87 @@
 							"header": [],
 							"cookie": [],
 							"body": "{\n    \"detail\": \"Refresh token invalido o expirado\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Get Current User Profile",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/auth/me",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"auth",
+								"me"
+							]
+						},
+						"description": "Get the profile of the currently authenticated user. Requires valid Bearer token in Authorization header."
+					},
+					"response": [
+						{
+							"name": "Success - 200 OK",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{access_token}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/auth/me",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"auth",
+										"me"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [],
+							"cookie": [],
+							"body": "{\n    \"user_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n    \"username\": \"admin\",\n    \"email\": \"admin@example.com\"\n}"
+						},
+						{
+							"name": "Unauthorized - 401",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer invalid-token"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/auth/me",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"auth",
+										"me"
+									]
+								}
+							},
+							"status": "Unauthorized",
+							"code": 401,
+							"_postman_previewlanguage": "json",
+							"header": [],
+							"cookie": [],
+							"body": "{\n    \"detail\": \"Token invalido o expirado\"\n}"
 						}
 					]
 				},
@@ -257,11 +485,12 @@
 							"raw": "{\n    \"refresh_token\": \"{{refresh_token}}\"\n}"
 						},
 						"url": {
-							"raw": "{{base_url}}/logout",
+							"raw": "{{base_url}}/auth/logout",
 							"host": [
 								"{{base_url}}"
 							],
 							"path": [
+								"auth",
 								"logout"
 							]
 						},
@@ -287,11 +516,12 @@
 									"raw": "{\n    \"refresh_token\": \"{{refresh_token}}\"\n}"
 								},
 								"url": {
-									"raw": "{{base_url}}/logout",
+									"raw": "{{base_url}}/auth/logout",
 									"host": [
 										"{{base_url}}"
 									],
 									"path": [
+										"auth",
 										"logout"
 									]
 								}
