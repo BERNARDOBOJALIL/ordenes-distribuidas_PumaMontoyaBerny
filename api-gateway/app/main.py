@@ -12,10 +12,12 @@ from .config import settings
 from .schemas import (
     LoginRequest,
     LogoutRequest,
+    MeResponse,
     OrderAccepted,
     OrderCreate,
     OrderStatus,
     RefreshRequest,
+    SignupRequest,
     TokenResponse,
 )
 from .services.order_service import get_order_status, send_to_writer
@@ -61,8 +63,9 @@ async def auth_middleware(request: Request, call_next):
         "/docs",
         "/openapi.json",
         "/redoc",
-        "/login",
-        "/refresh",
+        "/auth/signup",
+        "/auth/login",
+        "/auth/refresh",
     }
     if request.url.path in public_routes:
         return await call_next(request)
@@ -104,7 +107,27 @@ async def root():
     return {"gateway": "API Gateway activo", "version": "1.0.0", "docs": "/docs"}
 
 
-@app.post("/login", response_model=TokenResponse, tags=["Auth"], summary="Login de usuario")
+@app.post("/auth/signup", response_model=TokenResponse, tags=["Auth"], summary="Registrar usuario")
+async def signup(payload: SignupRequest):
+    try:
+        url = f"{settings.auth_service_url}/internal/auth/signup"
+        resp = await app.state.http.post(
+            url,
+            json=payload.model_dump(),
+            headers={"X-Service-Key": settings.internal_service_key},
+            timeout=5.0,
+        )
+        if resp.status_code == 409:
+            raise HTTPException(status_code=409, detail=resp.json().get("detail", "Usuario ya existe"))
+        resp.raise_for_status()
+        return resp.json()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Auth service no disponible: {exc}")
+
+
+@app.post("/auth/login", response_model=TokenResponse, tags=["Auth"], summary="Login de usuario")
 async def login(payload: LoginRequest):
     try:
         url = f"{settings.auth_service_url}/internal/auth/login"
@@ -124,7 +147,7 @@ async def login(payload: LoginRequest):
         raise HTTPException(status_code=503, detail=f"Auth service no disponible: {exc}")
 
 
-@app.post("/refresh", response_model=TokenResponse, tags=["Auth"], summary="Renovar access token")
+@app.post("/auth/refresh", response_model=TokenResponse, tags=["Auth"], summary="Renovar access token")
 async def refresh_tokens(payload: RefreshRequest):
     try:
         url = f"{settings.auth_service_url}/internal/auth/refresh"
@@ -144,7 +167,7 @@ async def refresh_tokens(payload: RefreshRequest):
         raise HTTPException(status_code=503, detail=f"Auth service no disponible: {exc}")
 
 
-@app.post("/logout", tags=["Auth"], summary="Cerrar sesion y revocar token")
+@app.post("/auth/logout", tags=["Auth"], summary="Cerrar sesion y revocar token")
 async def logout(payload: LogoutRequest, request: Request):
     token = getattr(request.state, "access_token", "")
     if not token:
@@ -160,6 +183,30 @@ async def logout(payload: LogoutRequest, request: Request):
         )
         resp.raise_for_status()
         return resp.json()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Auth service no disponible: {exc}")
+
+
+@app.get("/auth/me", response_model=MeResponse, tags=["Auth"], summary="Perfil del usuario autenticado")
+async def me(request: Request):
+    token = getattr(request.state, "access_token", "")
+    if not token:
+        raise HTTPException(status_code=401, detail="Token invalido")
+
+    try:
+        url = f"{settings.auth_service_url}/internal/auth/me"
+        resp = await app.state.http.post(
+            url,
+            json={"access_token": token},
+            headers={"X-Service-Key": settings.internal_service_key},
+            timeout=5.0,
+        )
+        if resp.status_code == 401:
+            raise HTTPException(status_code=401, detail="Token invalido o expirado")
+        resp.raise_for_status()
+        return resp.json()
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"Auth service no disponible: {exc}")
 

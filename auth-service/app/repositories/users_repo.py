@@ -13,6 +13,21 @@ async def get_user_by_identifier(session: AsyncSession, identifier: str) -> User
     return result.scalar_one_or_none()
 
 
+async def get_user_by_id(session: AsyncSession, user_id: str) -> User | None:
+    result = await session.execute(select(User).where(User.user_id == user_id))
+    return result.scalar_one_or_none()
+
+
+async def get_user_by_username(session: AsyncSession, username: str) -> User | None:
+    result = await session.execute(select(User).where(User.username == username))
+    return result.scalar_one_or_none()
+
+
+async def get_user_by_email(session: AsyncSession, email: str) -> User | None:
+    result = await session.execute(select(User).where(User.email == email))
+    return result.scalar_one_or_none()
+
+
 async def count_users(session: AsyncSession) -> int:
     result = await session.execute(select(func.count()).select_from(User))
     return result.scalar_one()
