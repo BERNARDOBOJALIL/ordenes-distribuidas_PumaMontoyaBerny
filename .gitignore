@@ -1,5 +1,9 @@
 # Environment
 .env
+.env.dev
+.env.prod
+.env.stagging
+.env.
 
 # Python
 __pycache__/
