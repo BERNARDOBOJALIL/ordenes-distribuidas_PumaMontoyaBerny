@@ -15,7 +15,7 @@ class Settings(BaseSettings):
 
 	default_admin_username: str = "admin"
 	default_admin_email: str = "admin@example.com"
-	default_admin_password: str = "ChangeMe123!"
+	default_admin_password: str = "admin"
 
 	model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

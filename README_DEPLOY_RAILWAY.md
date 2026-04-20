@@ -9,7 +9,7 @@ Este documento describe exactamente como quiero desplegar este proyecto en Railw
   - `api-gateway`
   - `writer-service`
   - `inventory-service`
-  - `notifications-service`
+  - `notification-service`
 - La infraestructura (Postgres, Redis, RabbitMQ) estara en la Cuenta A.
 - La Cuenta B debe conectarse a infraestructura de la Cuenta A usando URLs publicas y credenciales.
 
@@ -26,7 +26,7 @@ Este documento describe exactamente como quiero desplegar este proyecto en Railw
 ### Cuenta B
 
 - `inventory-service`
-- `notifications-service`
+- `notification-service`
 
 ## Regla de conectividad
 
@@ -40,7 +40,7 @@ Configurar cada servicio para construir su carpeta, no la raiz del repo:
 - `api-gateway` -> `api-gateway/`
 - `writer-service` -> `writer-service/`
 - `inventory-service` -> `inventory-service/`
-- `notifications-service` -> `notifications-service/`
+- `notification-service` -> `notification-service/`
 
 Builder recomendado: Dockerfile (cada carpeta ya tiene su Dockerfile).
 
@@ -53,7 +53,7 @@ Variables exactas que debo cargar en Railway para `api-gateway`:
 ```env
 WRITER_SERVICE_URL=http://${{writer-service.RAILWAY_PRIVATE_DOMAIN}}:7001
 INVENTORY_SERVICE_URL=https://inventory-service-xxxx.up.railway.app
-NOTIFICATIONS_SERVICE_URL=https://notifications-service-xxxx.up.railway.app
+NOTIFICATIONS_SERVICE_URL=https://notification-service-xxxx.up.railway.app
 REDIS_URL=${{Redis.REDIS_URL}}
 WRITER_TIMEOUT_SECONDS=8
 WRITER_MAX_RETRIES=2
@@ -91,9 +91,9 @@ REDIS_URL=redis://<user>:<pass>@<host-publico-cuenta-a>:<port>/0
 
 Si Postgres y Redis de Cuenta A exponen URL publica lista para usar, pegar esa URL directa.
 
-## 4) notifications-service (Cuenta B)
+## 4) notification-service (Cuenta B)
 
-Variables exactas para `notifications-service`:
+Variables exactas para `notification-service`:
 
 ```env
 NOTIFICATIONS_DATABASE_URL=postgresql+asyncpg://<user>:<pass>@<host-publico-cuenta-a>:<port>/<db>
@@ -117,7 +117,7 @@ Importante:
 
 1. En Cuenta A: crear `Postgres`, `Redis`, `RabbitMQ`.
 2. En Cuenta A: desplegar `writer-service` y validar health.
-3. En Cuenta B: desplegar `inventory-service` y `notifications-service` usando endpoints publicos de infraestructura de Cuenta A.
+3. En Cuenta B: desplegar `inventory-service` y `notification-service` usando endpoints publicos de infraestructura de Cuenta A.
 4. En Cuenta A: desplegar `api-gateway` apuntando a URLs publicas de Cuenta B.
 5. Probar flujo completo de orden.
 
@@ -147,6 +147,6 @@ Importante:
 - Mantener esta estrategia de 2 cuentas.
 - No intentar desplegar toda la infraestructura en Cuenta B.
 - Conservar `api-gateway` + `writer-service` en Cuenta A.
-- Conservar `inventory-service` + `notifications-service` en Cuenta B.
+- Conservar `inventory-service` + `notification-service` en Cuenta B.
 - Usar `${{...}}` siempre que el recurso este en la misma cuenta/proyecto.
 - Usar endpoints publicos solo para conexiones cross-account.

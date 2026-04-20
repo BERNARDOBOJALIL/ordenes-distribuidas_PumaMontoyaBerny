@@ -211,8 +211,15 @@ async def internal_verify(
 	if await is_blacklisted(app.state.redis, jti):
 		raise HTTPException(status_code=401, detail="Token revocado")
 
+	async with AsyncSessionLocal() as session:
+		user = await get_user_by_id(session, token_payload["sub"])
+
+	if not user or not user.is_active:
+		raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
 	return VerifyResponse(
 		user_id=token_payload["sub"],
+		username=user.username,
 		jti=jti,
 		exp=int(token_payload.get("exp", 0)),
 	)

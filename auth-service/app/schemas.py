@@ -40,6 +40,7 @@ class TokenResponse(BaseModel):
 
 class VerifyResponse(BaseModel):
 	user_id: str
+	username: str
 	jti: str
 	exp: int
 

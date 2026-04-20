@@ -92,6 +92,7 @@ async def auth_middleware(request: Request, call_next):
 
         verify_data = verify_resp.json()
         request.state.user_id = verify_data["user_id"]
+        request.state.username = verify_data["username"]
         request.state.access_token = token
     except httpx.HTTPStatusError:
         return JSONResponse(status_code=503, content={"detail": "Auth service no disponible"})
@@ -229,6 +230,7 @@ async def crear_orden(orden: OrderCreate, request: Request):
     """
     order_id = str(uuid.uuid4())
     user_id = request.state.user_id
+    username = request.state.username
     items_dicts = [item.model_dump() for item in orden.items]
 
     await send_to_writer(
@@ -236,7 +238,7 @@ async def crear_orden(orden: OrderCreate, request: Request):
         app.state.redis,
         order_id=order_id,
         user_id=user_id,
-        customer=orden.customer,
+        customer=username,
         items=items_dicts,
         service_key=settings.internal_service_key,
     )

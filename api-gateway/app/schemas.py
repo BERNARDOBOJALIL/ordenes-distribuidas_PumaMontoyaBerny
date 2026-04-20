@@ -10,7 +10,6 @@ class ItemPayload(BaseModel):
 
 class OrderCreate(BaseModel):
     """Body of POST /orders."""
-    customer: str = Field(..., examples=["Berny"])
     items: List[ItemPayload] = Field(..., examples=[[{"sku": "A1", "qty": 2}]])
 
 
