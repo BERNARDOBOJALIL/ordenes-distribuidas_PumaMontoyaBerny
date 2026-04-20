@@ -1,0 +1,662 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Auth + Orders Mini Demo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-a: #fff4da;
+      --bg-b: #d8f3dc;
+      --ink: #1f2937;
+      --ink-soft: #4b5563;
+      --panel: rgba(255, 255, 255, 0.78);
+      --line: rgba(17, 24, 39, 0.14);
+      --brand: #0f766e;
+      --brand-2: #f59e0b;
+      --ok: #166534;
+      --err: #991b1b;
+      --shadow: 0 20px 50px rgba(15, 23, 42, 0.12);
+      --radius: 18px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Space Grotesk", "Segoe UI", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 15% 15%, rgba(245, 158, 11, 0.32), transparent 40%),
+        radial-gradient(circle at 85% 25%, rgba(16, 185, 129, 0.24), transparent 35%),
+        linear-gradient(130deg, var(--bg-a), var(--bg-b));
+      padding: 28px;
+      animation: fadeIn 500ms ease-out;
+    }
+
+    .shell {
+      max-width: 1100px;
+      margin: 0 auto;
+      display: grid;
+      gap: 18px;
+    }
+
+    .hero {
+      background: linear-gradient(120deg, rgba(15, 118, 110, 0.95), rgba(13, 148, 136, 0.85));
+      color: #f8fafc;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 22px;
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      transform: translateY(8px);
+      opacity: 0;
+      animation: slideUp 480ms ease-out forwards;
+    }
+
+    .hero h1 {
+      margin: 0 0 6px;
+      font-size: clamp(1.3rem, 2vw, 2rem);
+      letter-spacing: 0.2px;
+    }
+
+    .hero p {
+      margin: 0;
+      color: rgba(248, 250, 252, 0.9);
+      font-size: 0.98rem;
+    }
+
+    .grid {
+      display: grid;
+      gap: 14px;
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 16px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(8px);
+      transform: translateY(10px);
+      opacity: 0;
+      animation: slideUp 420ms ease-out forwards;
+    }
+
+    .card:nth-child(2) { animation-delay: 40ms; }
+    .card:nth-child(3) { animation-delay: 80ms; }
+    .card:nth-child(4) { animation-delay: 120ms; }
+    .card:nth-child(5) { animation-delay: 160ms; }
+
+    .wide { grid-column: span 12; }
+    .half { grid-column: span 6; }
+
+    @media (max-width: 900px) {
+      .half { grid-column: span 12; }
+      body { padding: 14px; }
+    }
+
+    h2 {
+      margin: 0 0 12px;
+      font-size: 1.05rem;
+      color: #0f172a;
+    }
+
+    .row {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    label {
+      font-size: 0.86rem;
+      color: var(--ink-soft);
+      font-weight: 600;
+    }
+
+    input {
+      width: 100%;
+      border: 1px solid rgba(15, 23, 42, 0.18);
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-size: 0.95rem;
+      background: rgba(255, 255, 255, 0.9);
+      color: #111827;
+    }
+
+    input:focus {
+      outline: 2px solid rgba(15, 118, 110, 0.3);
+      border-color: rgba(15, 118, 110, 0.8);
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 6px;
+    }
+
+    button {
+      border: none;
+      cursor: pointer;
+      border-radius: 11px;
+      padding: 10px 14px;
+      font-weight: 700;
+      font-family: "Space Grotesk", sans-serif;
+      transition: transform 160ms ease, filter 160ms ease;
+      color: #fff;
+      background: linear-gradient(120deg, var(--brand), #0ea5a5);
+    }
+
+    button.secondary {
+      background: linear-gradient(120deg, #334155, #475569);
+    }
+
+    button.warn {
+      background: linear-gradient(120deg, #b45309, var(--brand-2));
+    }
+
+    button.danger {
+      background: linear-gradient(120deg, #991b1b, #dc2626);
+    }
+
+    button:hover {
+      filter: brightness(1.02);
+      transform: translateY(-1px);
+    }
+
+    .token-box {
+      display: grid;
+      gap: 8px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.9);
+      font-size: 0.8rem;
+      color: #334155;
+    }
+
+    .status {
+      font-size: 0.88rem;
+      min-height: 20px;
+    }
+
+    .status.ok { color: var(--ok); }
+    .status.err { color: var(--err); }
+
+    .order-log {
+      margin: 0;
+      padding: 10px 12px;
+      border: 1px solid rgba(15, 23, 42, 0.15);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.92);
+      color: #0f172a;
+      min-height: 120px;
+      max-height: 220px;
+      overflow: auto;
+      font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.8rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    pre {
+      margin: 0;
+      border: 1px solid rgba(15, 23, 42, 0.15);
+      border-radius: 12px;
+      padding: 12px;
+      font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.83rem;
+      line-height: 1.4;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 180px;
+      max-height: 330px;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    @keyframes slideUp {
+      to {
+        transform: translateY(0);
+        opacity: 1;
+      }
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0.75; }
+      to { opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="hero">
+      <h1>Auth + Orders Mini Demo</h1>
+      <p>Demo para probar autenticacion y verificar flujo de ordenes (crear y consultar estado) contra el API Gateway.</p>
+    </section>
+
+    <section class="grid">
+      <article class="card wide">
+        <h2>Configuracion</h2>
+        <div class="row">
+          <label for="baseUrl">API Gateway URL</label>
+          <input id="baseUrl" value="http://localhost:8000" />
+        </div>
+        <div class="actions">
+          <button class="secondary" id="saveCfgBtn">Guardar URL</button>
+        </div>
+      </article>
+
+      <article class="card half">
+        <h2>Signup</h2>
+        <div class="row">
+          <label for="signupUsername">Username</label>
+          <input id="signupUsername" placeholder="berny" />
+        </div>
+        <div class="row">
+          <label for="signupEmail">Email</label>
+          <input id="signupEmail" type="email" placeholder="berny@mail.com" />
+        </div>
+        <div class="row">
+          <label for="signupPassword">Password</label>
+          <input id="signupPassword" type="password" placeholder="********" />
+        </div>
+        <div class="actions">
+          <button id="signupBtn">Crear cuenta</button>
+        </div>
+      </article>
+
+      <article class="card half">
+        <h2>Login</h2>
+        <div class="row">
+          <label for="loginUser">Username o email</label>
+          <input id="loginUser" placeholder="berny" />
+        </div>
+        <div class="row">
+          <label for="loginPassword">Password</label>
+          <input id="loginPassword" type="password" placeholder="********" />
+        </div>
+        <div class="actions">
+          <button id="loginBtn">Iniciar sesion</button>
+        </div>
+      </article>
+
+      <article class="card half">
+        <h2>Sesion</h2>
+        <div class="token-box">
+          <span class="pill">access token: <strong id="accessBadge">no</strong></span>
+          <span class="pill">refresh token: <strong id="refreshBadge">no</strong></span>
+        </div>
+        <div class="actions">
+          <button class="warn" id="refreshBtn">Refresh token</button>
+          <button class="secondary" id="meBtn">/auth/me</button>
+          <button class="danger" id="logoutBtn">Logout</button>
+          <button class="secondary" id="clearBtn">Limpiar tokens</button>
+        </div>
+        <p class="status" id="statusText"></p>
+      </article>
+
+      <article class="card half">
+        <h2>Respuesta</h2>
+        <pre id="output">Esperando acciones...</pre>
+      </article>
+
+      <article class="card wide">
+        <h2>Ordenes</h2>
+        <div class="row">
+          <label>Customer</label>
+          <input value="Se toma automaticamente del usuario loggeado" disabled />
+        </div>
+        <div class="row">
+          <label for="orderSku">SKU</label>
+          <input id="orderSku" placeholder="A1" />
+        </div>
+        <div class="row">
+          <label for="orderQty">Cantidad</label>
+          <input id="orderQty" type="number" min="1" value="1" />
+        </div>
+        <div class="row">
+          <label for="orderId">Order ID</label>
+          <input id="orderId" placeholder="se completa al crear orden" />
+        </div>
+        <div class="actions">
+          <button id="createOrderBtn">Crear orden</button>
+          <button class="secondary" id="orderStatusBtn">Ver estado</button>
+          <button class="warn" id="pollOrderBtn">Seguir 10s</button>
+          <button class="secondary" id="listOrdersBtn">Listar ordenes</button>
+          <button class="secondary" id="listProductsBtn">Listar productos</button>
+        </div>
+      </article>
+
+      <article class="card wide">
+        <h2>Bitacora de orden</h2>
+        <pre id="orderLog" class="order-log">Sin actividad de ordenes aun...</pre>
+      </article>
+    </section>
+  </main>
+
+  <script>
+    const STORAGE_KEY = "auth-mini-demo";
+
+    const $ = (id) => document.getElementById(id);
+
+    const state = {
+      baseUrl: "http://localhost:8000",
+      accessToken: "",
+      refreshToken: "",
+      lastOrderId: "",
+    };
+
+    function loadState() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        state.baseUrl = parsed.baseUrl || state.baseUrl;
+        state.accessToken = parsed.accessToken || "";
+        state.refreshToken = parsed.refreshToken || "";
+        state.lastOrderId = parsed.lastOrderId || "";
+      } catch (_) {
+        writeStatus("No se pudo leer estado local", true);
+      }
+    }
+
+    function saveState() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      paint();
+    }
+
+    function paint() {
+      $("baseUrl").value = state.baseUrl;
+      $("accessBadge").textContent = state.accessToken ? "si" : "no";
+      $("refreshBadge").textContent = state.refreshToken ? "si" : "no";
+      $("orderId").value = state.lastOrderId || "";
+    }
+
+    function writeOutput(title, payload) {
+      const safe = typeof payload === "string" ? payload : JSON.stringify(payload, null, 2);
+      $("output").textContent = `${title}\n\n${safe}`;
+    }
+
+    function writeStatus(message, isError = false) {
+      const el = $("statusText");
+      el.textContent = message;
+      el.className = isError ? "status err" : "status ok";
+    }
+
+    function appendOrderLog(label, payload) {
+      const now = new Date().toLocaleTimeString();
+      const line = `[${now}] ${label}`;
+      const detail = payload === undefined
+        ? ""
+        : `\n${typeof payload === "string" ? payload : JSON.stringify(payload, null, 2)}`;
+      const box = $("orderLog");
+      const current = box.textContent === "Sin actividad de ordenes aun..." ? "" : box.textContent;
+      box.textContent = `${line}${detail}\n\n${current}`.slice(0, 8000);
+    }
+
+    function ensureAuthForOrders() {
+      if (!state.accessToken) {
+        writeStatus("Necesitas login antes de probar ordenes", true);
+        appendOrderLog("Orden bloqueada", "Falta token de acceso");
+        return false;
+      }
+      return true;
+    }
+
+    async function fetchOrderStatus(orderId) {
+      const res = await callApi(`/orders/${orderId}`, { method: "GET" });
+      writeOutput("Estado de orden", res);
+      appendOrderLog(`Estado ${orderId}: ${res.body.status || "sin status"}`, res.body);
+      return res;
+    }
+
+    async function callApi(path, options = {}) {
+      const url = `${state.baseUrl.replace(/\/$/, "")}${path}`;
+      const headers = {
+        "Content-Type": "application/json",
+        ...(options.headers || {}),
+      };
+      if (state.accessToken) {
+        headers.Authorization = `Bearer ${state.accessToken}`;
+      }
+
+      const resp = await fetch(url, {
+        method: options.method || "GET",
+        headers,
+        body: options.body ? JSON.stringify(options.body) : undefined,
+      });
+
+      const text = await resp.text();
+      let json = text;
+      try {
+        json = text ? JSON.parse(text) : {};
+      } catch (_) {
+        // Keep raw text if it is not JSON.
+      }
+
+      if (!resp.ok) {
+        throw { status: resp.status, body: json };
+      }
+      return { status: resp.status, body: json };
+    }
+
+    function persistTokensFromBody(body) {
+      if (body && body.access_token) state.accessToken = body.access_token;
+      if (body && body.refresh_token) state.refreshToken = body.refresh_token;
+      saveState();
+    }
+
+    function bind() {
+      $("saveCfgBtn").addEventListener("click", () => {
+        state.baseUrl = $("baseUrl").value.trim() || "http://localhost:8000";
+        saveState();
+        writeStatus("URL del gateway guardada");
+      });
+
+      $("signupBtn").addEventListener("click", async () => {
+        try {
+          const payload = {
+            username: $("signupUsername").value.trim(),
+            email: $("signupEmail").value.trim(),
+            password: $("signupPassword").value,
+          };
+          const res = await callApi("/auth/signup", { method: "POST", body: payload });
+          persistTokensFromBody(res.body);
+          writeOutput("Signup OK", res);
+          writeStatus("Cuenta creada y tokens recibidos");
+        } catch (err) {
+          writeOutput("Signup error", err);
+          writeStatus("Signup fallo", true);
+        }
+      });
+
+      $("loginBtn").addEventListener("click", async () => {
+        try {
+          const payload = {
+            username: $("loginUser").value.trim(),
+            password: $("loginPassword").value,
+          };
+          const res = await callApi("/auth/login", { method: "POST", body: payload });
+          persistTokensFromBody(res.body);
+          writeOutput("Login OK", res);
+          writeStatus("Login correcto");
+        } catch (err) {
+          writeOutput("Login error", err);
+          writeStatus("Login fallo", true);
+        }
+      });
+
+      $("refreshBtn").addEventListener("click", async () => {
+        try {
+          if (!state.refreshToken) {
+            writeStatus("No hay refresh token", true);
+            return;
+          }
+          const res = await callApi("/auth/refresh", {
+            method: "POST",
+            body: { refresh_token: state.refreshToken },
+          });
+          persistTokensFromBody(res.body);
+          writeOutput("Refresh OK", res);
+          writeStatus("Access token renovado");
+        } catch (err) {
+          writeOutput("Refresh error", err);
+          writeStatus("Refresh fallo", true);
+        }
+      });
+
+      $("meBtn").addEventListener("click", async () => {
+        try {
+          const res = await callApi("/auth/me", { method: "GET" });
+          writeOutput("/auth/me OK", res);
+          writeStatus("Perfil obtenido");
+        } catch (err) {
+          writeOutput("/auth/me error", err);
+          writeStatus("No se pudo obtener perfil", true);
+        }
+      });
+
+      $("logoutBtn").addEventListener("click", async () => {
+        try {
+          const res = await callApi("/auth/logout", {
+            method: "POST",
+            body: { refresh_token: state.refreshToken || null },
+          });
+          state.accessToken = "";
+          state.refreshToken = "";
+          saveState();
+          writeOutput("Logout OK", res);
+          writeStatus("Sesion cerrada y tokens limpiados");
+        } catch (err) {
+          writeOutput("Logout error", err);
+          writeStatus("Logout fallo", true);
+        }
+      });
+
+      $("clearBtn").addEventListener("click", () => {
+        state.accessToken = "";
+        state.refreshToken = "";
+        saveState();
+        writeOutput("Tokens", { access_token: null, refresh_token: null });
+        writeStatus("Tokens locales limpiados");
+      });
+
+      $("createOrderBtn").addEventListener("click", async () => {
+        if (!ensureAuthForOrders()) return;
+        try {
+          const qty = Number($("orderQty").value || "1");
+          const payload = {
+            items: [
+              {
+                sku: $("orderSku").value.trim() || "A1",
+                qty: Number.isFinite(qty) && qty > 0 ? qty : 1,
+              },
+            ],
+          };
+          const res = await callApi("/orders", { method: "POST", body: payload });
+          state.lastOrderId = res.body.order_id || "";
+          saveState();
+          writeOutput("Crear orden OK", res);
+          appendOrderLog(`Orden creada ${state.lastOrderId}`, res.body);
+          writeStatus("Orden enviada (RECEIVED), revisa estado");
+        } catch (err) {
+          writeOutput("Crear orden error", err);
+          appendOrderLog("Error al crear orden", err);
+          writeStatus("No se pudo crear la orden", true);
+        }
+      });
+
+      $("orderStatusBtn").addEventListener("click", async () => {
+        if (!ensureAuthForOrders()) return;
+        const orderId = $("orderId").value.trim() || state.lastOrderId;
+        if (!orderId) {
+          writeStatus("Primero crea una orden o pega un order_id", true);
+          return;
+        }
+        try {
+          await fetchOrderStatus(orderId);
+          writeStatus("Estado de orden consultado");
+        } catch (err) {
+          writeOutput("Estado de orden error", err);
+          appendOrderLog(`Error consultando ${orderId}`, err);
+          writeStatus("No se pudo consultar la orden", true);
+        }
+      });
+
+      $("pollOrderBtn").addEventListener("click", async () => {
+        if (!ensureAuthForOrders()) return;
+        const orderId = $("orderId").value.trim() || state.lastOrderId;
+        if (!orderId) {
+          writeStatus("Primero crea una orden o pega un order_id", true);
+          return;
+        }
+
+        appendOrderLog(`Seguimiento iniciado para ${orderId}`, "Intentos cada 2s por 10s");
+        for (let i = 0; i < 5; i++) {
+          try {
+            const res = await fetchOrderStatus(orderId);
+            const st = (res.body.status || "").toUpperCase();
+            if (st === "PERSISTED" || st === "FAILED") {
+              writeStatus(`Orden finalizo en estado ${st}`);
+              appendOrderLog(`Seguimiento finalizado (${st})`);
+              return;
+            }
+          } catch (err) {
+            appendOrderLog(`Intento ${i + 1}: error`, err);
+          }
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+        }
+        writeStatus("Seguimiento finalizado sin estado final", true);
+        appendOrderLog("Seguimiento finalizado", "No llego a PERSISTED/FAILED en 10s");
+      });
+
+      $("listOrdersBtn").addEventListener("click", async () => {
+        if (!ensureAuthForOrders()) return;
+        try {
+          const res = await callApi("/orders", { method: "GET" });
+          writeOutput("Listar ordenes OK", res);
+          const total = Array.isArray(res.body) ? res.body.length : 0;
+          appendOrderLog(`Listado de ordenes (${total})`, res.body);
+          writeStatus(`Se listaron ${total} orden(es)`);
+        } catch (err) {
+          writeOutput("Listar ordenes error", err);
+          appendOrderLog("Error listando ordenes", err);
+          writeStatus("No se pudieron listar ordenes", true);
+        }
+      });
+
+      $("listProductsBtn").addEventListener("click", async () => {
+        if (!ensureAuthForOrders()) return;
+        try {
+          const res = await callApi("/products", { method: "GET" });
+          writeOutput("Listar productos OK", res);
+          const total = Array.isArray(res.body) ? res.body.length : 0;
+          appendOrderLog(`Listado de productos (${total})`, res.body);
+          writeStatus(`Se listaron ${total} producto(s)`);
+        } catch (err) {
+          writeOutput("Listar productos error", err);
+          appendOrderLog("Error listando productos", err);
+          writeStatus("No se pudieron listar productos", true);
+        }
+      });
+    }
+
+    loadState();
+    paint();
+    bind();
+  </script>
+</body>
+</html>

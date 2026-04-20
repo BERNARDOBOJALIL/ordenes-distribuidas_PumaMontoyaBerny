@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     rabbitmq_exchange: str = "orders.events"
     order_created_routing_key: str = "order.created"
 
+    # Internal service authentication
+    internal_service_key: str = "change-me-internal-key"
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 

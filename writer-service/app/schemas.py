@@ -12,6 +12,7 @@ class InternalOrder(BaseModel):
     """Payload received from api-gateway via POST /internal/orders."""
 
     order_id: str = Field(..., examples=["550e8400-e29b-41d4-a716-446655440000"])
+    user_id: str = Field(..., examples=["550e8400-e29b-41d4-a716-446655440111"])
     customer: str = Field(..., examples=["Berny"])
     items:    List[ItemPayload] = Field(..., examples=[[{"sku": "A1", "qty": 2}]])
 

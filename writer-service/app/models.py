@@ -14,6 +14,7 @@ class Order(Base):
     __tablename__ = "orders"
 
     order_id   = Column(String(36), primary_key=True, index=True)
+    user_id    = Column(String(36), nullable=True, index=True)
     customer   = Column(String(255), nullable=False)
     items      = Column(Text, nullable=False)          
     created_at = Column(DateTime, default=lambda: datetime.utcnow())
