@@ -151,6 +151,77 @@ sequenceDiagram
 6. **GET /orders/{order_id}** → `api-gateway` lee el estado desde Redis.
 7. **GET /inventory/stock** → `api-gateway` consulta a `inventory-service` y devuelve el stock actual.
 
+## Autenticacion
+
+### Diagrama del flujo de autenticacion
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor U as Usuario
+    participant F as Frontend/Cliente
+    participant G as API Gateway
+    participant A as Auth Service
+    participant DB as Postgres (usuarios)
+    participant R as Redis (refresh + blacklist)
+    participant P as Endpoint protegido (/orders, /auth/me, /auth/logout)
+
+    Note over U,P: Registro
+    U->>F: Completa signup
+    F->>G: POST /auth/signup {username,email,password}
+    G->>A: POST /internal/auth/signup + X-Service-Key
+    A->>DB: Verifica username/email unicos
+    A->>DB: Inserta usuario (password con bcrypt)
+    A->>A: Crea access token JWT (sub, jti, exp)
+    A->>R: Guarda refresh token hasheado con TTL
+    A-->>G: access_token + refresh_token
+    G-->>F: Tokens
+
+    Note over U,P: Login
+    U->>F: Completa login
+    F->>G: POST /auth/login {username|email,password}
+    G->>A: POST /internal/auth/login + X-Service-Key
+    A->>DB: Busca usuario por username/email
+    A->>A: Verifica password (bcrypt)
+    A->>A: Emite nuevo access token
+    A->>R: Emite refresh token (setex)
+    A-->>G: access_token + refresh_token
+    G-->>F: Tokens
+
+    Note over U,P: Uso de rutas privadas
+    F->>G: Request con Authorization Bearer [access_token]
+    G->>A: POST /internal/auth/verify + X-Service-Key
+    A->>A: Valida firma/exp del JWT
+    A->>R: Revisa blacklist por jti
+    A->>DB: Valida usuario activo
+    A-->>G: user_id + username
+    G->>P: Continua la solicitud autenticada
+    P-->>F: 2xx
+
+    Note over U,P: Refresh
+    F->>G: POST /auth/refresh {refresh_token}
+    G->>A: POST /internal/auth/refresh + X-Service-Key
+    A->>R: consume_refresh_token (rotacion: delete + issue nuevo)
+    A->>A: Emite nuevo access token
+    A-->>G: access_token + refresh_token nuevo
+    G-->>F: Tokens renovados
+
+    Note over U,P: Logout
+    F->>G: POST /auth/logout (+ refresh_token opcional)
+    G->>A: POST /internal/auth/logout + X-Service-Key
+    A->>A: Decodifica access token (si valido)
+    A->>R: blacklist jti hasta exp
+    A->>R: Revoca refresh_token (si viene)
+    A-->>G: {status: ok}
+    G-->>F: Sesion cerrada
+```
+
+Notas clave:
+- El `api-gateway` protege rutas privadas con middleware y delega la validacion al `auth-service`.
+- Todos los endpoints internos de auth exigen `X-Service-Key` para evitar uso directo externo.
+- El refresh token se guarda hasheado en Redis y se rota en cada `refresh`.
+- El access token no se persiste; se invalida por blacklist de `jti` al hacer logout.
+
 ## Estructura del proyecto
 
 ```
