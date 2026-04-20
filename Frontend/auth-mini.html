@@ -160,6 +160,59 @@
       background: linear-gradient(120deg, #b45309, var(--brand-2));
     }
 
+    .role-selector {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+
+    .role-btn {
+      flex: 1;
+      border: 2px solid rgba(15, 23, 42, 0.18);
+      border-radius: 11px;
+      padding: 8px 10px;
+      font-size: 0.85rem;
+      font-weight: 700;
+      font-family: "Space Grotesk", sans-serif;
+      background: rgba(255,255,255,0.6);
+      color: #334155;
+      cursor: pointer;
+      transition: all 160ms ease;
+    }
+
+    .role-btn.active-admin {
+      background: linear-gradient(120deg, #7c3aed, #a855f7);
+      border-color: #7c3aed;
+      color: #fff;
+    }
+
+    .role-btn.active-user {
+      background: linear-gradient(120deg, var(--brand), #0ea5a5);
+      border-color: var(--brand);
+      color: #fff;
+    }
+
+    .role-badge {
+      display: inline-block;
+      padding: 2px 10px;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      margin-left: 6px;
+    }
+
+    .role-badge.admin {
+      background: rgba(124,58,237,0.15);
+      color: #7c3aed;
+      border: 1px solid rgba(124,58,237,0.3);
+    }
+
+    .role-badge.user {
+      background: rgba(15,118,110,0.12);
+      color: var(--brand);
+      border: 1px solid rgba(15,118,110,0.3);
+    }
+
     button.danger {
       background: linear-gradient(120deg, #991b1b, #dc2626);
     }
@@ -262,6 +315,13 @@
       <article class="card half">
         <h2>Signup</h2>
         <div class="row">
+          <label>Rol de la cuenta</label>
+          <div class="role-selector">
+            <button type="button" class="role-btn active-user" id="signupRoleUser" onclick="setSignupRole('user')">👤 User</button>
+            <button type="button" class="role-btn" id="signupRoleAdmin" onclick="setSignupRole('admin')">🛡 Admin</button>
+          </div>
+        </div>
+        <div class="row">
           <label for="signupUsername">Username</label>
           <input id="signupUsername" placeholder="berny" />
         </div>
@@ -294,10 +354,10 @@
       </article>
 
       <article class="card half">
-        <h2>Sesion</h2>
+        <h2>Sesion <span class="role-badge" id="roleBadge" style="display:none"></span></h2>
         <div class="token-box">
           <span class="pill">access token: <strong id="accessBadge">no</strong></span>
-          <span class="pill">refresh token: <strong id="refreshBadge">no</strong></span>
+          <span class="pill" id="refreshPill">refresh token: <strong id="refreshBadge">no</strong></span>
         </div>
         <div class="actions">
           <button class="warn" id="refreshBtn">Refresh token</button>
@@ -357,7 +417,15 @@
       accessToken: "",
       refreshToken: "",
       lastOrderId: "",
+      role: "",
+      signupRole: "user",
     };
+
+    function setSignupRole(role) {
+      state.signupRole = role;
+      $("signupRoleUser").className = "role-btn" + (role === "user" ? " active-user" : "");
+      $("signupRoleAdmin").className = "role-btn" + (role === "admin" ? " active-admin" : "");
+    }
 
     function loadState() {
       try {
@@ -368,25 +436,65 @@
         state.accessToken = parsed.accessToken || "";
         state.refreshToken = parsed.refreshToken || "";
         state.lastOrderId = parsed.lastOrderId || "";
+        state.role = parsed.role || "";
       } catch (_) {
         writeStatus("No se pudo leer estado local", true);
       }
     }
 
     function saveState() {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      const toSave = {
+        baseUrl: state.baseUrl,
+        accessToken: state.accessToken,
+        refreshToken: state.refreshToken,
+        lastOrderId: state.lastOrderId,
+        role: state.role,
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
       paint();
     }
 
     function paint() {
       $("baseUrl").value = state.baseUrl;
-      $("accessBadge").textContent = state.accessToken ? "si" : "no";
-      $("refreshBadge").textContent = state.refreshToken ? "si" : "no";
+      const isAdmin = state.role === "admin";
+      // Tokens: solo admin puede ver si hay token
+      $("accessBadge").textContent = state.accessToken
+        ? (isAdmin ? "si" : "oculto")
+        : "no";
+      $("refreshBadge").textContent = state.refreshToken
+        ? (isAdmin ? "si" : "oculto")
+        : "no";
       $("orderId").value = state.lastOrderId || "";
+      // Role badge
+      const badge = $("roleBadge");
+      if (state.role) {
+        badge.textContent = state.role;
+        badge.className = "role-badge " + state.role;
+        badge.style.display = "";
+      } else {
+        badge.style.display = "none";
+      }
     }
 
     function writeOutput(title, payload) {
-      const safe = typeof payload === "string" ? payload : JSON.stringify(payload, null, 2);
+      // Para usuario comun, ocultar tokens en la salida
+      let data = payload;
+      if (state.role === "user" && typeof data === "object" && data !== null) {
+        data = Object.fromEntries(
+          Object.entries(data).map(([k, v]) => {
+            if (k === "access_token" || k === "refresh_token") return [k, "[oculto]"];
+            if (k === "body" && typeof v === "object" && v !== null) {
+              return [k, Object.fromEntries(
+                Object.entries(v).map(([bk, bv]) =>
+                  (bk === "access_token" || bk === "refresh_token") ? [bk, "[oculto]"] : [bk, bv]
+                )
+              )];
+            }
+            return [k, v];
+          })
+        );
+      }
+      const safe = typeof data === "string" ? data : JSON.stringify(data, null, 2);
       $("output").textContent = `${title}\n\n${safe}`;
     }
 
@@ -456,6 +564,7 @@
     function persistTokensFromBody(body) {
       if (body && body.access_token) state.accessToken = body.access_token;
       if (body && body.refresh_token) state.refreshToken = body.refresh_token;
+      if (body && body.role) state.role = body.role;
       saveState();
     }
 
@@ -472,11 +581,12 @@
             username: $("signupUsername").value.trim(),
             email: $("signupEmail").value.trim(),
             password: $("signupPassword").value,
+            role: state.signupRole,
           };
           const res = await callApi("/auth/signup", { method: "POST", body: payload });
           persistTokensFromBody(res.body);
           writeOutput("Signup OK", res);
-          writeStatus("Cuenta creada y tokens recibidos");
+          writeStatus("Cuenta creada · rol: " + (res.body.role || state.signupRole));
         } catch (err) {
           writeOutput("Signup error", err);
           writeStatus("Signup fallo", true);
@@ -492,7 +602,7 @@
           const res = await callApi("/auth/login", { method: "POST", body: payload });
           persistTokensFromBody(res.body);
           writeOutput("Login OK", res);
-          writeStatus("Login correcto");
+          writeStatus("Login correcto · rol: " + (res.body.role || state.role || "?"));
         } catch (err) {
           writeOutput("Login error", err);
           writeStatus("Login fallo", true);
@@ -537,6 +647,7 @@
           });
           state.accessToken = "";
           state.refreshToken = "";
+          state.role = "";
           saveState();
           writeOutput("Logout OK", res);
           writeStatus("Sesion cerrada y tokens limpiados");
@@ -549,6 +660,7 @@
       $("clearBtn").addEventListener("click", () => {
         state.accessToken = "";
         state.refreshToken = "";
+        state.role = "";
         saveState();
         writeOutput("Tokens", { access_token: null, refresh_token: null });
         writeStatus("Tokens locales limpiados");

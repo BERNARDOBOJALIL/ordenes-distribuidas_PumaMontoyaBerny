@@ -38,12 +38,14 @@ async def create_user(
     username: str,
     email: str,
     password_hash: str,
+    role: str = "user",
 ) -> User:
     user = User(
         user_id=str(uuid.uuid4()),
         username=username,
         email=email,
         password_hash=password_hash,
+        role=role,
         is_active=True,
     )
     session.add(user)

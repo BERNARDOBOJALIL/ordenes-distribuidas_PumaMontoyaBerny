@@ -93,6 +93,7 @@ async def auth_middleware(request: Request, call_next):
         verify_data = verify_resp.json()
         request.state.user_id = verify_data["user_id"]
         request.state.username = verify_data["username"]
+        request.state.role = verify_data.get("role", "user")
         request.state.access_token = token
     except httpx.HTTPStatusError:
         return JSONResponse(status_code=503, content={"detail": "Auth service no disponible"})
@@ -258,8 +259,7 @@ async def obtener_orden(order_id: str, request: Request):
     if not data:
         raise HTTPException(status_code=404, detail=f"Orden {order_id} no encontrada en Redis")
 
-    request_user_id = request.state.user_id
-    if data.get("user_id") != request_user_id:
+    if request.state.role != "admin" and data.get("user_id") != request.state.user_id:
         raise HTTPException(status_code=404, detail=f"Orden {order_id} no encontrada")
     return data
 
@@ -273,9 +273,11 @@ async def listar_ordenes(request: Request):
     """Proxy a GET /internal/orders del writer-service."""
     try:
         url = f"{settings.writer_service_url}/internal/orders"
+        # Admin ve todas las órdenes; user solo las suyas
+        params = {} if request.state.role == "admin" else {"user_id": request.state.user_id}
         resp = await app.state.http.get(
             url,
-            params={"user_id": request.state.user_id},
+            params=params,
             headers={"X-Service-Key": settings.internal_service_key},
             timeout=5.0,
         )

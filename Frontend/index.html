@@ -1,1143 +1,662 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Órdenes Distribuidas</title>
-<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
-<style>
-  :root {
-    --bg: #0a0a0f;
-    --surface: #111118;
-    --surface2: #1a1a24;
-    --border: #2a2a3a;
-    --accent: #00e5a0;
-    --accent2: #7c6fff;
-    --warn: #ff6b6b;
-    --text: #e8e8f0;
-    --muted: #6b6b88;
-    --mono: 'Space Mono', monospace;
-    --sans: 'DM Sans', sans-serif;
-  }
-
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: var(--sans);
-    min-height: 100vh;
-    overflow-x: hidden;
-  }
-
-  /* Grid noise overlay */
-  body::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    background-image:
-      linear-gradient(rgba(0,229,160,0.03) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(0,229,160,0.03) 1px, transparent 1px);
-    background-size: 40px 40px;
-    pointer-events: none;
-    z-index: 0;
-  }
-
-  .container {
-    max-width: 960px;
-    margin: 0 auto;
-    padding: 0 24px;
-    position: relative;
-    z-index: 1;
-  }
-
-  /* ── Header ── */
-  header {
-    padding: 32px 0 24px;
-    border-bottom: 1px solid var(--border);
-    margin-bottom: 40px;
-  }
-
-  .header-inner {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 12px;
-  }
-
-  .logo {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-
-  .logo-icon {
-    width: 36px;
-    height: 36px;
-    background: var(--accent);
-    border-radius: 8px;
-    display: grid;
-    place-items: center;
-  }
-
-  .logo-icon svg { color: #0a0a0f; }
-
-  h1 {
-    font-family: var(--mono);
-    font-size: 1.1rem;
-    font-weight: 700;
-    letter-spacing: -0.02em;
-    color: var(--text);
-  }
-
-  h1 span { color: var(--accent); }
-
-  .status-pill {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    padding: 6px 14px;
-    font-family: var(--mono);
-    font-size: 0.7rem;
-    color: var(--muted);
-  }
-
-  .status-pill .dot {
-    width: 7px; height: 7px;
-    border-radius: 50%;
-    background: var(--muted);
-    transition: background 0.3s;
-  }
-
-  .status-pill.online .dot { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
-  .status-pill.offline .dot { background: var(--warn); }
-
-  /* ── Two columns ── */
-  .grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 24px;
-    margin-bottom: 40px;
-  }
-
-  @media (max-width: 640px) { .grid { grid-template-columns: 1fr; } }
-
-  /* ── Cards ── */
-  .card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 24px;
-    position: relative;
-    overflow: hidden;
-    animation: fadeUp 0.4s ease both;
-  }
-
-  .card::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; right: 0;
-    height: 2px;
-    background: linear-gradient(90deg, var(--accent), var(--accent2));
-    opacity: 0;
-    transition: opacity 0.3s;
-  }
-
-  .card:hover::before { opacity: 1; }
-
-  .card-label {
-    font-family: var(--mono);
-    font-size: 0.65rem;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--accent);
-    margin-bottom: 16px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .card-label::after {
-    content: '';
-    flex: 1;
-    height: 1px;
-    background: var(--border);
-  }
-
-  /* ── Form ── */
-  .field { margin-bottom: 16px; }
-
-  label {
-    display: block;
-    font-size: 0.75rem;
-    font-weight: 500;
-    color: var(--muted);
-    margin-bottom: 6px;
-    font-family: var(--mono);
-  }
-
-  input[type="text"] {
-    width: 100%;
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 10px 14px;
-    color: var(--text);
-    font-family: var(--sans);
-    font-size: 0.9rem;
-    outline: none;
-    transition: border-color 0.2s, box-shadow 0.2s;
-  }
-
-  input[type="text"]:focus {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 3px rgba(0,229,160,0.1);
-  }
-
-  input[type="text"]::placeholder { color: var(--muted); }
-
-  /* Items list */
-  .items-list { margin-bottom: 12px; }
-
-  .item-row {
-    display: grid;
-    grid-template-columns: 1fr 80px 32px;
-    gap: 8px;
-    margin-bottom: 8px;
-    animation: fadeUp 0.2s ease both;
-  }
-
-  .btn-remove {
-    background: transparent;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    color: var(--muted);
-    cursor: pointer;
-    font-size: 1rem;
-    transition: all 0.2s;
-    display: grid;
-    place-items: center;
-  }
-
-  .btn-remove:hover { border-color: var(--warn); color: var(--warn); background: rgba(255,107,107,0.08); }
-
-  .btn-add-item {
-    background: transparent;
-    border: 1px dashed var(--border);
-    border-radius: 8px;
-    color: var(--muted);
-    cursor: pointer;
-    font-size: 0.8rem;
-    font-family: var(--mono);
-    padding: 8px;
-    width: 100%;
-    transition: all 0.2s;
-    margin-bottom: 16px;
-  }
-
-  .btn-add-item:hover { border-color: var(--accent); color: var(--accent); background: rgba(0,229,160,0.04); }
-
-  .btn-primary {
-    width: 100%;
-    background: var(--accent);
-    border: none;
-    border-radius: 8px;
-    color: #0a0a0f;
-    font-family: var(--mono);
-    font-size: 0.8rem;
-    font-weight: 700;
-    letter-spacing: 0.05em;
-    padding: 12px;
-    cursor: pointer;
-    transition: all 0.2s;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-  }
-
-  .btn-primary:hover { background: #00ffb3; transform: translateY(-1px); box-shadow: 0 4px 20px rgba(0,229,160,0.3); }
-  .btn-primary:active { transform: translateY(0); }
-  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
-
-  /* ── Query card ── */
-  .query-row {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 8px;
-  }
-
-  .btn-secondary {
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    color: var(--accent2);
-    font-family: var(--mono);
-    font-size: 0.75rem;
-    font-weight: 700;
-    padding: 10px 16px;
-    cursor: pointer;
-    transition: all 0.2s;
-    white-space: nowrap;
-  }
-
-  .btn-secondary:hover { border-color: var(--accent2); background: rgba(124,111,255,0.1); }
-
-  /* ── Response box ── */
-  .response-box {
-    margin-top: 16px;
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 16px;
-    font-family: var(--mono);
-    font-size: 0.75rem;
-    line-height: 1.7;
-    min-height: 60px;
-    transition: all 0.3s;
-    display: none;
-  }
-
-  .response-box.show { display: block; animation: fadeUp 0.3s ease; }
-
-  .response-key { color: var(--muted); }
-  .response-val { color: var(--accent); }
-  .response-val.failed { color: var(--warn); }
-  .response-val.received { color: var(--accent); }
-  .response-val.processing { color: #ffd166; }
-  .response-val.saved { color: var(--accent2); }
-
-  /* ── Orders log ── */
-  .orders-log { grid-column: 1 / -1; }
-
-  .stock-card { grid-column: 1 / -1; }
-
-  .stock-toolbar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
-    margin-bottom: 8px;
-  }
-
-  .stock-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-    gap: 10px;
-    margin-top: 10px;
-  }
-
-  .stock-item {
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 10px;
-  }
-
-  .stock-sku {
-    font-family: var(--mono);
-    font-size: 0.68rem;
-    color: var(--muted);
-    margin-bottom: 4px;
-  }
-
-  .stock-value {
-    font-family: var(--mono);
-    font-size: 0.95rem;
-    color: var(--accent);
-    font-weight: 700;
-  }
-
-  /* ── Event Flow Board ── */
-  .flow-card { grid-column: 1 / -1; }
-
-  .flow-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    flex-wrap: wrap;
-    margin-bottom: 12px;
-  }
-
-  .flow-order {
-    font-family: var(--mono);
-    font-size: 0.68rem;
-    color: var(--muted);
-    letter-spacing: 0.04em;
-  }
-
-  .flow-track {
-    display: grid;
-    grid-template-columns: repeat(9, 1fr);
-    align-items: center;
-    gap: 8px;
-    margin-top: 10px;
-  }
-
-  .flow-step {
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 10px;
-    min-height: 88px;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
-  }
-
-  .flow-step .title {
-    font-family: var(--mono);
-    font-size: 0.62rem;
-    color: var(--text);
-    line-height: 1.4;
-    letter-spacing: 0.02em;
-  }
-
-  .flow-step .state {
-    font-family: var(--mono);
-    font-size: 0.58rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--muted);
-  }
-
-  .flow-connector {
-    text-align: center;
-    font-family: var(--mono);
-    color: var(--muted);
-    opacity: 0.7;
-  }
-
-  .flow-step.done {
-    border-color: rgba(0,229,160,0.35);
-    box-shadow: 0 0 0 1px rgba(0,229,160,0.15) inset;
-  }
-
-  .flow-step.active {
-    border-color: rgba(255,209,102,0.45);
-    box-shadow: 0 0 16px rgba(255,209,102,0.15);
-  }
-
-  .flow-step.failed {
-    border-color: rgba(255,107,107,0.45);
-    box-shadow: 0 0 16px rgba(255,107,107,0.15);
-  }
-
-  .flow-step.done .state { color: var(--accent); }
-  .flow-step.active .state { color: #ffd166; }
-  .flow-step.failed .state { color: var(--warn); }
-
-  @media (max-width: 900px) {
-    .flow-track {
-      grid-template-columns: 1fr;
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Auth + Orders Mini Demo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-a: #fff4da;
+      --bg-b: #d8f3dc;
+      --ink: #1f2937;
+      --ink-soft: #4b5563;
+      --panel: rgba(255, 255, 255, 0.78);
+      --line: rgba(17, 24, 39, 0.14);
+      --brand: #0f766e;
+      --brand-2: #f59e0b;
+      --ok: #166534;
+      --err: #991b1b;
+      --shadow: 0 20px 50px rgba(15, 23, 42, 0.12);
+      --radius: 18px;
     }
-    .flow-connector {
-      transform: rotate(90deg);
-      justify-self: center;
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Space Grotesk", "Segoe UI", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 15% 15%, rgba(245, 158, 11, 0.32), transparent 40%),
+        radial-gradient(circle at 85% 25%, rgba(16, 185, 129, 0.24), transparent 35%),
+        linear-gradient(130deg, var(--bg-a), var(--bg-b));
+      padding: 28px;
+      animation: fadeIn 500ms ease-out;
     }
-  }
 
-  .log-empty {
-    text-align: center;
-    color: var(--muted);
-    font-family: var(--mono);
-    font-size: 0.75rem;
-    padding: 32px 0;
-    opacity: 0.5;
-  }
+    .shell {
+      max-width: 1100px;
+      margin: 0 auto;
+      display: grid;
+      gap: 18px;
+    }
 
-  .order-entry {
-    display: grid;
-    grid-template-columns: auto 1fr auto auto;
-    gap: 12px;
-    align-items: center;
-    padding: 12px 0;
-    border-bottom: 1px solid var(--border);
-    animation: fadeUp 0.3s ease both;
-    cursor: pointer;
-    transition: background 0.15s;
-    border-radius: 4px;
-    padding-left: 4px;
-  }
+    .hero {
+      background: linear-gradient(120deg, rgba(15, 118, 110, 0.95), rgba(13, 148, 136, 0.85));
+      color: #f8fafc;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 22px;
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      transform: translateY(8px);
+      opacity: 0;
+      animation: slideUp 480ms ease-out forwards;
+    }
 
-  .order-entry:last-child { border-bottom: none; }
-  .order-entry:hover { background: rgba(255,255,255,0.02); }
+    .hero h1 {
+      margin: 0 0 6px;
+      font-size: clamp(1.3rem, 2vw, 2rem);
+      letter-spacing: 0.2px;
+    }
 
-  .order-num {
-    font-family: var(--mono);
-    font-size: 0.65rem;
-    color: var(--muted);
-    min-width: 24px;
-  }
+    .hero p {
+      margin: 0;
+      color: rgba(248, 250, 252, 0.9);
+      font-size: 0.98rem;
+    }
 
-  .order-id {
-    font-family: var(--mono);
-    font-size: 0.72rem;
-    color: var(--text);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
+    .grid {
+      display: grid;
+      gap: 14px;
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+    }
 
-  .order-customer {
-    font-size: 0.8rem;
-    color: var(--muted);
-    font-weight: 500;
-  }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 16px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(8px);
+      transform: translateY(10px);
+      opacity: 0;
+      animation: slideUp 420ms ease-out forwards;
+    }
 
-  .badge {
-    font-family: var(--mono);
-    font-size: 0.6rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    padding: 3px 10px;
-    border-radius: 999px;
-    text-transform: uppercase;
-  }
+    .card:nth-child(2) { animation-delay: 40ms; }
+    .card:nth-child(3) { animation-delay: 80ms; }
+    .card:nth-child(4) { animation-delay: 120ms; }
+    .card:nth-child(5) { animation-delay: 160ms; }
 
-  .badge-RECEIVED { background: rgba(0,229,160,0.12); color: var(--accent); border: 1px solid rgba(0,229,160,0.2); }
-  .badge-FAILED { background: rgba(255,107,107,0.12); color: var(--warn); border: 1px solid rgba(255,107,107,0.2); }
-  .badge-PROCESSING { background: rgba(255,209,102,0.12); color: #ffd166; border: 1px solid rgba(255,209,102,0.2); }
-  .badge-SAVED { background: rgba(124,111,255,0.12); color: var(--accent2); border: 1px solid rgba(124,111,255,0.2); }
-  .badge-UNKNOWN { background: rgba(107,107,136,0.12); color: var(--muted); border: 1px solid var(--border); }
+    .wide { grid-column: span 12; }
+    .half { grid-column: span 6; }
 
-  /* ── Toast ── */
-  .toast {
-    position: fixed;
-    bottom: 24px;
-    right: 24px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 14px 20px;
-    font-family: var(--mono);
-    font-size: 0.75rem;
-    color: var(--text);
-    z-index: 100;
-    transform: translateY(80px);
-    opacity: 0;
-    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-    max-width: 320px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
+    @media (max-width: 900px) {
+      .half { grid-column: span 12; }
+      body { padding: 14px; }
+    }
 
-  .toast.show { transform: translateY(0); opacity: 1; }
-  .toast.success { border-color: rgba(0,229,160,0.4); }
-  .toast.error { border-color: rgba(255,107,107,0.4); }
-  .toast-icon { font-size: 1rem; }
+    h2 {
+      margin: 0 0 12px;
+      font-size: 1.05rem;
+      color: #0f172a;
+    }
 
-  /* ── Spinner ── */
-  .spinner {
-    width: 14px; height: 14px;
-    border: 2px solid rgba(10,10,15,0.3);
-    border-top-color: #0a0a0f;
-    border-radius: 50%;
-    animation: spin 0.6s linear infinite;
-    display: none;
-  }
+    .row {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
 
-  .loading .spinner { display: block; }
-  .loading .btn-text { display: none; }
+    label {
+      font-size: 0.86rem;
+      color: var(--ink-soft);
+      font-weight: 600;
+    }
 
-  /* ── Animations ── */
-  @keyframes fadeUp {
-    from { opacity: 0; transform: translateY(12px); }
-    to   { opacity: 1; transform: translateY(0); }
-  }
+    input {
+      width: 100%;
+      border: 1px solid rgba(15, 23, 42, 0.18);
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-size: 0.95rem;
+      background: rgba(255, 255, 255, 0.9);
+      color: #111827;
+    }
 
-  @keyframes spin {
-    to { transform: rotate(360deg); }
-  }
+    input:focus {
+      outline: 2px solid rgba(15, 118, 110, 0.3);
+      border-color: rgba(15, 118, 110, 0.8);
+    }
 
-  /* ── API URL bar ── */
-  .api-bar {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 10px 16px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 24px;
-    font-family: var(--mono);
-    font-size: 0.72rem;
-  }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 6px;
+    }
 
-  .api-bar-label { color: var(--muted); white-space: nowrap; }
+    button {
+      border: none;
+      cursor: pointer;
+      border-radius: 11px;
+      padding: 10px 14px;
+      font-weight: 700;
+      font-family: "Space Grotesk", sans-serif;
+      transition: transform 160ms ease, filter 160ms ease;
+      color: #fff;
+      background: linear-gradient(120deg, var(--brand), #0ea5a5);
+    }
 
-  .api-bar input {
-    flex: 1;
-    background: transparent;
-    border: none;
-    color: var(--accent2);
-    font-family: var(--mono);
-    font-size: 0.72rem;
-    outline: none;
-  }
+    button.secondary {
+      background: linear-gradient(120deg, #334155, #475569);
+    }
 
-  .api-bar input:focus { color: var(--text); }
+    button.warn {
+      background: linear-gradient(120deg, #b45309, var(--brand-2));
+    }
 
-  footer {
-    border-top: 1px solid var(--border);
-    padding: 20px 0 32px;
-    text-align: center;
-    font-family: var(--mono);
-    font-size: 0.65rem;
-    color: var(--muted);
-    letter-spacing: 0.05em;
-  }
-</style>
+    button.danger {
+      background: linear-gradient(120deg, #991b1b, #dc2626);
+    }
+
+    button:hover {
+      filter: brightness(1.02);
+      transform: translateY(-1px);
+    }
+
+    .token-box {
+      display: grid;
+      gap: 8px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.9);
+      font-size: 0.8rem;
+      color: #334155;
+    }
+
+    .status {
+      font-size: 0.88rem;
+      min-height: 20px;
+    }
+
+    .status.ok { color: var(--ok); }
+    .status.err { color: var(--err); }
+
+    .order-log {
+      margin: 0;
+      padding: 10px 12px;
+      border: 1px solid rgba(15, 23, 42, 0.15);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.92);
+      color: #0f172a;
+      min-height: 120px;
+      max-height: 220px;
+      overflow: auto;
+      font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.8rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    pre {
+      margin: 0;
+      border: 1px solid rgba(15, 23, 42, 0.15);
+      border-radius: 12px;
+      padding: 12px;
+      font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.83rem;
+      line-height: 1.4;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 180px;
+      max-height: 330px;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    @keyframes slideUp {
+      to {
+        transform: translateY(0);
+        opacity: 1;
+      }
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0.75; }
+      to { opacity: 1; }
+    }
+  </style>
 </head>
 <body>
+  <main class="shell">
+    <section class="hero">
+      <h1>Auth + Orders Mini Demo</h1>
+      <p>Demo para probar autenticacion y verificar flujo de ordenes (crear y consultar estado) contra el API Gateway.</p>
+    </section>
 
-<div class="container">
-
-  <header>
-    <div class="header-inner">
-      <div class="logo">
-        <div class="logo-icon">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
-          </svg>
+    <section class="grid">
+      <article class="card wide">
+        <h2>Configuracion</h2>
+        <div class="row">
+          <label for="baseUrl">API Gateway URL</label>
+          <input id="baseUrl" value="http://localhost:8000" />
         </div>
-        <div>
-          <h1>ordenes<span>.</span>distribuidas</h1>
+        <div class="actions">
+          <button class="secondary" id="saveCfgBtn">Guardar URL</button>
         </div>
-      </div>
-      <div class="status-pill" id="statusPill">
-        <div class="dot"></div>
-        <span id="statusText">verificando...</span>
-      </div>
-    </div>
-  </header>
+      </article>
 
-  <!-- API URL config -->
-  <div class="api-bar">
-    <span class="api-bar-label">API_BASE →</span>
-    <input type="text" id="apiBase" value="http://localhost:8000" spellcheck="false"/>
-  </div>
-
-  <div class="grid">
-
-    <!-- ── Crear Orden ── -->
-    <div class="card" style="animation-delay:0.05s">
-      <div class="card-label">
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        POST /orders
-      </div>
-
-      <div class="field">
-        <label>customer</label>
-        <input type="text" id="customer" placeholder="ej. Berny" />
-      </div>
-
-      <div class="field">
-        <label>items</label>
-        <div class="items-list" id="itemsList"></div>
-        <button class="btn-add-item" onclick="addItem()">+ agregar item</button>
-      </div>
-
-      <button class="btn-primary" id="btnCreate" onclick="createOrder()">
-        <div class="spinner"></div>
-        <span class="btn-text">Crear Orden →</span>
-      </button>
-
-      <div class="response-box" id="createResponse"></div>
-    </div>
-
-    <!-- ── Consultar Orden ── -->
-    <div class="card" style="animation-delay:0.1s">
-      <div class="card-label">
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        GET /orders/{id}
-      </div>
-
-      <div class="field">
-        <label>order_id</label>
-        <div class="query-row">
-          <input type="text" id="queryId" placeholder="uuid..." />
-          <button class="btn-secondary" onclick="queryOrder()">Consultar</button>
+      <article class="card half">
+        <h2>Signup</h2>
+        <div class="row">
+          <label for="signupUsername">Username</label>
+          <input id="signupUsername" placeholder="berny" />
         </div>
-      </div>
-
-      <div class="response-box" id="queryResponse"></div>
-
-      <div style="margin-top: 20px;">
-        <div class="card-label" style="margin-bottom: 12px;">
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
-          polling automático
+        <div class="row">
+          <label for="signupEmail">Email</label>
+          <input id="signupEmail" type="email" placeholder="berny@mail.com" />
         </div>
-        <div style="display:flex; align-items:center; gap:10px;">
-          <button class="btn-secondary" id="btnPoll" onclick="togglePoll()" style="flex:1">▶ Iniciar Poll</button>
-          <span style="font-family:var(--mono);font-size:0.65rem;color:var(--muted)" id="pollStatus">inactivo</span>
+        <div class="row">
+          <label for="signupPassword">Password</label>
+          <input id="signupPassword" type="password" placeholder="********" />
         </div>
-      </div>
-    </div>
-
-    <!-- ── Flujo visual RabbitMQ ── -->
-    <div class="card flow-card" style="animation-delay:0.13s">
-      <div class="card-label">
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-        flujo de eventos · rabbitmq
-      </div>
-
-      <div class="flow-header">
-        <div class="flow-order" id="flowOrder">order_id: —</div>
-        <span class="badge badge-UNKNOWN" id="flowGlobalStatus">SIN DATOS</span>
-      </div>
-
-      <div class="flow-track" id="flowTrack"></div>
-    </div>
-
-    <div class="card stock-card" style="animation-delay:0.14s">
-      <div class="card-label">
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 7 9 18l-5-5"/></svg>
-        stock actual (inventory-service)
-      </div>
-
-      <div class="stock-toolbar">
-        <span style="font-family:var(--mono);font-size:0.65rem;color:var(--muted)">GET /inventory/stock</span>
-        <button class="btn-secondary" onclick="refreshStock()">Refrescar stock</button>
-      </div>
-
-      <div class="stock-grid" id="stockGrid">
-        <div class="log-empty">// sin datos de stock aún</div>
-      </div>
-    </div>
-
-    <!-- ── Log de órdenes ── -->
-    <div class="card orders-log" style="animation-delay:0.15s">
-      <div class="card-label" style="justify-content: space-between; flex-wrap: wrap; gap: 8px;">
-        <div style="display:flex;align-items:center;gap:8px;">
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-          historial de sesión
+        <div class="actions">
+          <button id="signupBtn">Crear cuenta</button>
         </div>
-        <button onclick="clearLog()" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-family:var(--mono);font-size:0.65rem;letter-spacing:0.05em;">limpiar ×</button>
-      </div>
+      </article>
 
-      <div id="ordersLog">
-        <div class="log-empty">// sin órdenes aún</div>
-      </div>
-    </div>
+      <article class="card half">
+        <h2>Login</h2>
+        <div class="row">
+          <label for="loginUser">Username o email</label>
+          <input id="loginUser" placeholder="berny" />
+        </div>
+        <div class="row">
+          <label for="loginPassword">Password</label>
+          <input id="loginPassword" type="password" placeholder="********" />
+        </div>
+        <div class="actions">
+          <button id="loginBtn">Iniciar sesion</button>
+        </div>
+      </article>
 
-  </div>
+      <article class="card half">
+        <h2>Sesion</h2>
+        <div class="token-box">
+          <span class="pill">access token: <strong id="accessBadge">no</strong></span>
+          <span class="pill">refresh token: <strong id="refreshBadge">no</strong></span>
+        </div>
+        <div class="actions">
+          <button class="warn" id="refreshBtn">Refresh token</button>
+          <button class="secondary" id="meBtn">/auth/me</button>
+          <button class="danger" id="logoutBtn">Logout</button>
+          <button class="secondary" id="clearBtn">Limpiar tokens</button>
+        </div>
+        <p class="status" id="statusText"></p>
+      </article>
 
-  <footer>API GATEWAY v1.0.0 · redis://localhost:6379 · order-service :7001 · rabbitmq :5672</footer>
-</div>
+      <article class="card half">
+        <h2>Respuesta</h2>
+        <pre id="output">Esperando acciones...</pre>
+      </article>
 
-<!-- Toast -->
-<div class="toast" id="toast">
-  <span class="toast-icon" id="toastIcon"></span>
-  <span id="toastMsg"></span>
-</div>
+      <article class="card wide">
+        <h2>Ordenes</h2>
+        <div class="row">
+          <label>Customer</label>
+          <input value="Se toma automaticamente del usuario loggeado" disabled />
+        </div>
+        <div class="row">
+          <label for="orderSku">SKU</label>
+          <input id="orderSku" placeholder="A1" />
+        </div>
+        <div class="row">
+          <label for="orderQty">Cantidad</label>
+          <input id="orderQty" type="number" min="1" value="1" />
+        </div>
+        <div class="row">
+          <label for="orderId">Order ID</label>
+          <input id="orderId" placeholder="se completa al crear orden" />
+        </div>
+        <div class="actions">
+          <button id="createOrderBtn">Crear orden</button>
+          <button class="secondary" id="orderStatusBtn">Ver estado</button>
+          <button class="warn" id="pollOrderBtn">Seguir 10s</button>
+          <button class="secondary" id="listOrdersBtn">Listar ordenes</button>
+          <button class="secondary" id="listProductsBtn">Listar productos</button>
+        </div>
+      </article>
 
-<script>
-  // ── State ──
-  let orders = [];
-  let pollInterval = null;
-  let pollActive = false;
+      <article class="card wide">
+        <h2>Bitacora de orden</h2>
+        <pre id="orderLog" class="order-log">Sin actividad de ordenes aun...</pre>
+      </article>
+    </section>
+  </main>
 
-  const FLOW_STEPS = [
-    { key: 'order', label: 'order-service\ncrea orden' },
-    { key: 'publish', label: 'publica evento\norder.created' },
-    { key: 'inventory', label: 'inventory-service\ndescuenta stock' },
-    { key: 'notification', label: 'notification-service\nmanda confirmación' },
-    { key: 'analytics', label: 'analytics-service\nregistra métrica' },
-  ];
+  <script>
+    const STORAGE_KEY = "auth-mini-demo";
 
-  const flowState = {
-    orderId: null,
-    globalStatus: 'SIN DATOS',
-    steps: {
-      order: 'idle',
-      publish: 'idle',
-      inventory: 'idle',
-      notification: 'idle',
-      analytics: 'idle',
-    }
-  };
+    const $ = (id) => document.getElementById(id);
 
-  // ── Init ──
-  window.onload = () => {
-    addItem();
-    checkHealth();
-    loadHistory();
-    renderFlow();
-    refreshStock();
-  };
-
-  async function loadHistory() {
-    try {
-      const r = await fetch(getBase() + '/orders');
-      if (!r.ok) return;
-      const data = await r.json();
-      // data is array of {order_id, customer, items, created_at}
-      // get status for each from Redis via GET /orders/{id}
-      orders = data.map(o => ({ ...o, status: '...' }));
-      renderLog();
-      // enrich with Redis status in background
-      data.forEach(async o => {
-        try {
-          const rs = await fetch(getBase() + '/orders/' + o.order_id);
-          if (rs.ok) {
-            const s = await rs.json();
-            const idx = orders.findIndex(x => x.order_id === o.order_id);
-            if (idx !== -1) { orders[idx].status = s.status; renderLog(); }
-          }
-        } catch {}
-      });
-    } catch {}
-  }
-
-  function getBase() {
-    return document.getElementById('apiBase').value.replace(/\/$/, '');
-  }
-
-  // ── Health check ──
-  async function checkHealth() {
-    const pill = document.getElementById('statusPill');
-    const txt  = document.getElementById('statusText');
-    try {
-      const r = await fetch(getBase() + '/', { signal: AbortSignal.timeout(3000) });
-      if (r.ok) {
-        pill.className = 'status-pill online';
-        txt.textContent = 'gateway online';
-      } else throw new Error();
-    } catch {
-      pill.className = 'status-pill offline';
-      txt.textContent = 'sin conexión';
-    }
-    setTimeout(checkHealth, 10000);
-  }
-
-  // ── Items ──
-  function addItem() {
-    const list = document.getElementById('itemsList');
-    const row = document.createElement('div');
-    row.className = 'item-row';
-    row.innerHTML = `
-      <input type="text" placeholder="SKU (ej. A1)" style="font-family:var(--mono);font-size:0.8rem;" />
-      <input type="text" placeholder="qty" style="font-family:var(--mono);font-size:0.8rem;" />
-      <button class="btn-remove" onclick="this.parentElement.remove()">×</button>
-    `;
-    list.appendChild(row);
-  }
-
-  function getItems() {
-    const rows = document.querySelectorAll('.item-row');
-    const items = [];
-    rows.forEach(row => {
-      const inputs = row.querySelectorAll('input');
-      const sku = inputs[0].value.trim();
-      const qty = parseInt(inputs[1].value.trim());
-      if (sku && qty > 0) items.push({ sku, qty });
-    });
-    return items;
-  }
-
-  // ── Create Order ──
-  async function createOrder() {
-    const customer = document.getElementById('customer').value.trim();
-    const items    = getItems();
-    const btn      = document.getElementById('btnCreate');
-    const resBox   = document.getElementById('createResponse');
-
-    if (!customer) { showToast('Ingresa un customer', 'error'); return; }
-    if (items.length === 0) { showToast('Agrega al menos un item con SKU y qty > 0', 'error'); return; }
-
-    btn.classList.add('loading');
-    btn.disabled = true;
-
-    try {
-      const r = await fetch(getBase() + '/orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ customer, items })
-      });
-
-      const data = await r.json();
-
-      if (r.status === 202) {
-        showResponse(resBox, data, 'success');
-        addToLog({ ...data, customer, items });
-        document.getElementById('queryId').value = data.order_id;
-        applyFlowFromStatus(data.order_id, 'RECEIVED');
-        setTimeout(refreshStock, 1200);
-        showToast('Orden creada · ' + data.order_id.slice(0,8) + '...', 'success');
-      } else {
-        showResponse(resBox, data, 'error');
-        showToast('Error ' + r.status, 'error');
-      }
-    } catch(e) {
-      showResponse(resBox, { error: e.message }, 'error');
-      showToast('No se pudo conectar al gateway', 'error');
-    }
-
-    btn.classList.remove('loading');
-    btn.disabled = false;
-  }
-
-  // ── Query Order ──
-  async function queryOrder() {
-    const id     = document.getElementById('queryId').value.trim();
-    const resBox = document.getElementById('queryResponse');
-
-    if (!id) { showToast('Ingresa un order_id', 'error'); return; }
-
-    try {
-      const r    = await fetch(getBase() + '/orders/' + id);
-      const data = await r.json();
-
-      if (r.ok) {
-        showResponse(resBox, data, 'success');
-        updateLogEntry(data);
-        applyFlowFromStatus(data.order_id, data.status || 'UNKNOWN');
-        if ((data.status || '').toUpperCase() === 'PERSISTED') refreshStock();
-      } else {
-        showResponse(resBox, data, 'error');
-        applyFlowFromStatus(id, 'FAILED');
-      }
-    } catch(e) {
-      showResponse(resBox, { error: e.message }, 'error');
-      applyFlowFromStatus(id, 'FAILED');
-    }
-  }
-
-  // ── Polling ──
-  function togglePoll() {
-    const btn = document.getElementById('btnPoll');
-    const lbl = document.getElementById('pollStatus');
-
-    if (pollActive) {
-      clearInterval(pollInterval);
-      pollActive = false;
-      btn.textContent = '▶ Iniciar Poll';
-      lbl.textContent = 'inactivo';
-    } else {
-      const id = document.getElementById('queryId').value.trim();
-      if (!id) { showToast('Primero ingresa un order_id', 'error'); return; }
-      pollActive = true;
-      btn.textContent = '■ Detener Poll';
-      lbl.textContent = 'cada 2s';
-      queryOrder();
-      pollInterval = setInterval(queryOrder, 2000);
-    }
-  }
-
-  // ── Log ──
-  function addToLog(order) {
-    orders.unshift(order);
-    renderLog();
-  }
-
-  function updateLogEntry(data) {
-    const idx = orders.findIndex(o => o.order_id === data.order_id);
-    if (idx !== -1) {
-      orders[idx] = { ...orders[idx], ...data };
-      renderLog();
-    }
-  }
-
-  function renderLog() {
-    const log = document.getElementById('ordersLog');
-    if (orders.length === 0) {
-      log.innerHTML = '<div class="log-empty">// sin órdenes aún</div>';
-      return;
-    }
-    log.innerHTML = orders.map((o, i) => `
-      <div class="order-entry" onclick="selectOrder('${o.order_id}')">
-        <span class="order-num">${String(orders.length - i).padStart(2,'0')}</span>
-        <span class="order-id">${o.order_id}</span>
-        <span class="order-customer">${o.customer || '—'}</span>
-        <span class="badge badge-${o.status || 'UNKNOWN'}">${o.status || '?'}</span>
-      </div>
-    `).join('');
-  }
-
-  function selectOrder(id) {
-    document.getElementById('queryId').value = id;
-    queryOrder();
-  }
-
-  function clearLog() {
-    orders = [];
-    renderLog();
-    resetFlow();
-  }
-
-  function resetFlow() {
-    flowState.orderId = null;
-    flowState.globalStatus = 'SIN DATOS';
-    flowState.steps = {
-      order: 'idle',
-      publish: 'idle',
-      inventory: 'idle',
-      notification: 'idle',
-      analytics: 'idle',
+    const state = {
+      baseUrl: "http://localhost:8000",
+      accessToken: "",
+      refreshToken: "",
+      lastOrderId: "",
     };
-    renderFlow();
-  }
 
-  function applyFlowFromStatus(orderId, status) {
-    const s = String(status || '').toUpperCase();
-    flowState.orderId = orderId || flowState.orderId;
-    flowState.globalStatus = s || 'SIN DATOS';
-
-    if (s === 'RECEIVED') {
-      flowState.steps = {
-        order: 'done',
-        publish: 'active',
-        inventory: 'idle',
-        notification: 'idle',
-        analytics: 'idle',
-      };
-    } else if (s === 'PERSISTED') {
-      flowState.steps = {
-        order: 'done',
-        publish: 'done',
-        inventory: 'done',
-        notification: 'done',
-        analytics: 'done',
-      };
-    } else if (s === 'FAILED') {
-      flowState.steps = {
-        order: 'failed',
-        publish: 'failed',
-        inventory: 'idle',
-        notification: 'idle',
-        analytics: 'idle',
-      };
-    } else {
-      flowState.steps = {
-        order: 'idle',
-        publish: 'idle',
-        inventory: 'idle',
-        notification: 'idle',
-        analytics: 'idle',
-      };
+    function loadState() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        state.baseUrl = parsed.baseUrl || state.baseUrl;
+        state.accessToken = parsed.accessToken || "";
+        state.refreshToken = parsed.refreshToken || "";
+        state.lastOrderId = parsed.lastOrderId || "";
+      } catch (_) {
+        writeStatus("No se pudo leer estado local", true);
+      }
     }
 
-    renderFlow();
-  }
-
-  function renderFlow() {
-    const flowTrack = document.getElementById('flowTrack');
-    const flowOrder = document.getElementById('flowOrder');
-    const flowGlobalStatus = document.getElementById('flowGlobalStatus');
-
-    flowOrder.textContent = 'order_id: ' + (flowState.orderId || '—');
-    flowGlobalStatus.textContent = flowState.globalStatus;
-    flowGlobalStatus.className = 'badge badge-' + (flowState.globalStatus || 'UNKNOWN');
-
-    const parts = [];
-    FLOW_STEPS.forEach((step, idx) => {
-      const state = flowState.steps[step.key] || 'idle';
-      const stateText = state === 'done'
-        ? 'completado'
-        : state === 'active'
-          ? 'en proceso'
-          : state === 'failed'
-            ? 'falló'
-            : 'pendiente';
-
-      parts.push(`
-        <div class="flow-step ${state}">
-          <div class="title">${step.label.replace('\n', '<br/>')}</div>
-          <div class="state">${stateText}</div>
-        </div>
-      `);
-
-      if (idx < FLOW_STEPS.length - 1) {
-        parts.push('<div class="flow-connector">→</div>');
-      }
-    });
-
-    flowTrack.innerHTML = parts.join('');
-  }
-
-  async function refreshStock() {
-    const stockGrid = document.getElementById('stockGrid');
-    try {
-      const r = await fetch(getBase() + '/inventory/stock');
-      const data = await r.json();
-
-      if (!r.ok) {
-        stockGrid.innerHTML = `<div class="log-empty">// error stock: ${JSON.stringify(data)}</div>`;
-        return;
-      }
-
-      const items = Array.isArray(data.items) ? data.items : [];
-      if (items.length === 0) {
-        stockGrid.innerHTML = '<div class="log-empty">// aún no hay SKUs descontados</div>';
-        return;
-      }
-
-      stockGrid.innerHTML = items.map((item) => `
-        <div class="stock-item">
-          <div class="stock-sku">SKU: ${item.sku}</div>
-          <div class="stock-value">${item.stock}</div>
-        </div>
-      `).join('');
-    } catch (e) {
-      stockGrid.innerHTML = `<div class="log-empty">// no se pudo consultar stock (${e.message})</div>`;
+    function saveState() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      paint();
     }
-  }
 
-  // ── UI helpers ──
-  function formatMxTime(value) {
-    if (typeof value !== 'string' || !value.trim()) return value;
+    function paint() {
+      $("baseUrl").value = state.baseUrl;
+      $("accessBadge").textContent = state.accessToken ? "si" : "no";
+      $("refreshBadge").textContent = state.refreshToken ? "si" : "no";
+      $("orderId").value = state.lastOrderId || "";
+    }
 
-    // If backend sends naive ISO (no timezone), treat it as UTC.
-    const iso = /Z$|[+-]\d{2}:?\d{2}$/.test(value) ? value : value + 'Z';
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return value;
+    function writeOutput(title, payload) {
+      const safe = typeof payload === "string" ? payload : JSON.stringify(payload, null, 2);
+      $("output").textContent = `${title}\n\n${safe}`;
+    }
 
-    return new Intl.DateTimeFormat('es-MX', {
-      timeZone: 'America/Mexico_City',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false,
-    }).format(d) + ' GMT-6';
-  }
+    function writeStatus(message, isError = false) {
+      const el = $("statusText");
+      el.textContent = message;
+      el.className = isError ? "status err" : "status ok";
+    }
 
-  function showResponse(box, data, type) {
-    box.className = 'response-box show';
-    box.innerHTML = Object.entries(data).map(([k, v]) => {
-      const shown = (k === 'last_update' || k === 'created_at')
-        ? formatMxTime(v)
-        : v;
-      const valClass = k === 'status'
-        ? `response-val ${String(v).toLowerCase()}`
-        : 'response-val';
-      return `<div><span class="response-key">${k}: </span><span class="${valClass}">${JSON.stringify(shown)}</span></div>`;
-    }).join('');
-  }
+    function appendOrderLog(label, payload) {
+      const now = new Date().toLocaleTimeString();
+      const line = `[${now}] ${label}`;
+      const detail = payload === undefined
+        ? ""
+        : `\n${typeof payload === "string" ? payload : JSON.stringify(payload, null, 2)}`;
+      const box = $("orderLog");
+      const current = box.textContent === "Sin actividad de ordenes aun..." ? "" : box.textContent;
+      box.textContent = `${line}${detail}\n\n${current}`.slice(0, 8000);
+    }
 
-  let toastTimer;
-  function showToast(msg, type = 'info') {
-    const t = document.getElementById('toast');
-    const m = document.getElementById('toastMsg');
-    const i = document.getElementById('toastIcon');
-    clearTimeout(toastTimer);
-    m.textContent = msg;
-    i.textContent = type === 'success' ? '✓' : type === 'error' ? '✗' : 'ℹ';
-    t.className = `toast show ${type}`;
-    toastTimer = setTimeout(() => t.className = 'toast', 3000);
-  }
-</script>
+    function ensureAuthForOrders() {
+      if (!state.accessToken) {
+        writeStatus("Necesitas login antes de probar ordenes", true);
+        appendOrderLog("Orden bloqueada", "Falta token de acceso");
+        return false;
+      }
+      return true;
+    }
+
+    async function fetchOrderStatus(orderId) {
+      const res = await callApi(`/orders/${orderId}`, { method: "GET" });
+      writeOutput("Estado de orden", res);
+      appendOrderLog(`Estado ${orderId}: ${res.body.status || "sin status"}`, res.body);
+      return res;
+    }
+
+    async function callApi(path, options = {}) {
+      const url = `${state.baseUrl.replace(/\/$/, "")}${path}`;
+      const headers = {
+        "Content-Type": "application/json",
+        ...(options.headers || {}),
+      };
+      if (state.accessToken) {
+        headers.Authorization = `Bearer ${state.accessToken}`;
+      }
+
+      const resp = await fetch(url, {
+        method: options.method || "GET",
+        headers,
+        body: options.body ? JSON.stringify(options.body) : undefined,
+      });
+
+      const text = await resp.text();
+      let json = text;
+      try {
+        json = text ? JSON.parse(text) : {};
+      } catch (_) {
+        // Keep raw text if it is not JSON.
+      }
+
+      if (!resp.ok) {
+        throw { status: resp.status, body: json };
+      }
+      return { status: resp.status, body: json };
+    }
+
+    function persistTokensFromBody(body) {
+      if (body && body.access_token) state.accessToken = body.access_token;
+      if (body && body.refresh_token) state.refreshToken = body.refresh_token;
+      saveState();
+    }
+
+    function bind() {
+      $("saveCfgBtn").addEventListener("click", () => {
+        state.baseUrl = $("baseUrl").value.trim() || "http://localhost:8000";
+        saveState();
+        writeStatus("URL del gateway guardada");
+      });
+
+      $("signupBtn").addEventListener("click", async () => {
+        try {
+          const payload = {
+            username: $("signupUsername").value.trim(),
+            email: $("signupEmail").value.trim(),
+            password: $("signupPassword").value,
+          };
+          const res = await callApi("/auth/signup", { method: "POST", body: payload });
+          persistTokensFromBody(res.body);
+          writeOutput("Signup OK", res);
+          writeStatus("Cuenta creada y tokens recibidos");
+        } catch (err) {
+          writeOutput("Signup error", err);
+          writeStatus("Signup fallo", true);
+        }
+      });
+
+      $("loginBtn").addEventListener("click", async () => {
+        try {
+          const payload = {
+            username: $("loginUser").value.trim(),
+            password: $("loginPassword").value,
+          };
+          const res = await callApi("/auth/login", { method: "POST", body: payload });
+          persistTokensFromBody(res.body);
+          writeOutput("Login OK", res);
+          writeStatus("Login correcto");
+        } catch (err) {
+          writeOutput("Login error", err);
+          writeStatus("Login fallo", true);
+        }
+      });
+
+      $("refreshBtn").addEventListener("click", async () => {
+        try {
+          if (!state.refreshToken) {
+            writeStatus("No hay refresh token", true);
+            return;
+          }
+          const res = await callApi("/auth/refresh", {
+            method: "POST",
+            body: { refresh_token: state.refreshToken },
+          });
+          persistTokensFromBody(res.body);
+          writeOutput("Refresh OK", res);
+          writeStatus("Access token renovado");
+        } catch (err) {
+          writeOutput("Refresh error", err);
+          writeStatus("Refresh fallo", true);
+        }
+      });
+
+      $("meBtn").addEventListener("click", async () => {
+        try {
+          const res = await callApi("/auth/me", { method: "GET" });
+          writeOutput("/auth/me OK", res);
+          writeStatus("Perfil obtenido");
+        } catch (err) {
+          writeOutput("/auth/me error", err);
+          writeStatus("No se pudo obtener perfil", true);
+        }
+      });
+
+      $("logoutBtn").addEventListener("click", async () => {
+        try {
+          const res = await callApi("/auth/logout", {
+            method: "POST",
+            body: { refresh_token: state.refreshToken || null },
+          });
+          state.accessToken = "";
+          state.refreshToken = "";
+          saveState();
+          writeOutput("Logout OK", res);
+          writeStatus("Sesion cerrada y tokens limpiados");
+        } catch (err) {
+          writeOutput("Logout error", err);
+          writeStatus("Logout fallo", true);
+        }
+      });
+
+      $("clearBtn").addEventListener("click", () => {
+        state.accessToken = "";
+        state.refreshToken = "";
+        saveState();
+        writeOutput("Tokens", { access_token: null, refresh_token: null });
+        writeStatus("Tokens locales limpiados");
+      });
+
+      $("createOrderBtn").addEventListener("click", async () => {
+        if (!ensureAuthForOrders()) return;
+        try {
+          const qty = Number($("orderQty").value || "1");
+          const payload = {
+            items: [
+              {
+                sku: $("orderSku").value.trim() || "A1",
+                qty: Number.isFinite(qty) && qty > 0 ? qty : 1,
+              },
+            ],
+          };
+          const res = await callApi("/orders", { method: "POST", body: payload });
+          state.lastOrderId = res.body.order_id || "";
+          saveState();
+          writeOutput("Crear orden OK", res);
+          appendOrderLog(`Orden creada ${state.lastOrderId}`, res.body);
+          writeStatus("Orden enviada (RECEIVED), revisa estado");
+        } catch (err) {
+          writeOutput("Crear orden error", err);
+          appendOrderLog("Error al crear orden", err);
+          writeStatus("No se pudo crear la orden", true);
+        }
+      });
+
+      $("orderStatusBtn").addEventListener("click", async () => {
+        if (!ensureAuthForOrders()) return;
+        const orderId = $("orderId").value.trim() || state.lastOrderId;
+        if (!orderId) {
+          writeStatus("Primero crea una orden o pega un order_id", true);
+          return;
+        }
+        try {
+          await fetchOrderStatus(orderId);
+          writeStatus("Estado de orden consultado");
+        } catch (err) {
+          writeOutput("Estado de orden error", err);
+          appendOrderLog(`Error consultando ${orderId}`, err);
+          writeStatus("No se pudo consultar la orden", true);
+        }
+      });
+
+      $("pollOrderBtn").addEventListener("click", async () => {
+        if (!ensureAuthForOrders()) return;
+        const orderId = $("orderId").value.trim() || state.lastOrderId;
+        if (!orderId) {
+          writeStatus("Primero crea una orden o pega un order_id", true);
+          return;
+        }
+
+        appendOrderLog(`Seguimiento iniciado para ${orderId}`, "Intentos cada 2s por 10s");
+        for (let i = 0; i < 5; i++) {
+          try {
+            const res = await fetchOrderStatus(orderId);
+            const st = (res.body.status || "").toUpperCase();
+            if (st === "PERSISTED" || st === "FAILED") {
+              writeStatus(`Orden finalizo en estado ${st}`);
+              appendOrderLog(`Seguimiento finalizado (${st})`);
+              return;
+            }
+          } catch (err) {
+            appendOrderLog(`Intento ${i + 1}: error`, err);
+          }
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+        }
+        writeStatus("Seguimiento finalizado sin estado final", true);
+        appendOrderLog("Seguimiento finalizado", "No llego a PERSISTED/FAILED en 10s");
+      });
+
+      $("listOrdersBtn").addEventListener("click", async () => {
+        if (!ensureAuthForOrders()) return;
+        try {
+          const res = await callApi("/orders", { method: "GET" });
+          writeOutput("Listar ordenes OK", res);
+          const total = Array.isArray(res.body) ? res.body.length : 0;
+          appendOrderLog(`Listado de ordenes (${total})`, res.body);
+          writeStatus(`Se listaron ${total} orden(es)`);
+        } catch (err) {
+          writeOutput("Listar ordenes error", err);
+          appendOrderLog("Error listando ordenes", err);
+          writeStatus("No se pudieron listar ordenes", true);
+        }
+      });
+
+      $("listProductsBtn").addEventListener("click", async () => {
+        if (!ensureAuthForOrders()) return;
+        try {
+          const res = await callApi("/products", { method: "GET" });
+          writeOutput("Listar productos OK", res);
+          const total = Array.isArray(res.body) ? res.body.length : 0;
+          appendOrderLog(`Listado de productos (${total})`, res.body);
+          writeStatus(`Se listaron ${total} producto(s)`);
+        } catch (err) {
+          writeOutput("Listar productos error", err);
+          appendOrderLog("Error listando productos", err);
+          writeStatus("No se pudieron listar productos", true);
+        }
+      });
+    }
+
+    loadState();
+    paint();
+    bind();
+  </script>
 </body>
 </html>

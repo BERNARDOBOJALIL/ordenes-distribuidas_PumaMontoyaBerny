@@ -20,6 +20,7 @@ async def seed_default_user_if_empty(session: AsyncSession) -> int:
         username=settings.default_admin_username,
         email=settings.default_admin_email,
         password_hash=hash_password(settings.default_admin_password),
+        role="admin",
     )
     logger.info("[Seeder] Usuario default creado: %s", settings.default_admin_username)
     return 1

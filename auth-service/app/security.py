@@ -23,6 +23,7 @@ def verify_password(password: str, password_hash: str) -> bool:
 
 def create_access_token(
     user_id: str,
+    role: str,
     secret_key: str,
     algorithm: str,
     expires_minutes: int,
@@ -31,6 +32,7 @@ def create_access_token(
     expire = now + timedelta(minutes=expires_minutes)
     payload = {
         "sub": user_id,
+        "role": role,
         "jti": str(uuid.uuid4()),
         "type": "access",
         "iat": int(now.timestamp()),

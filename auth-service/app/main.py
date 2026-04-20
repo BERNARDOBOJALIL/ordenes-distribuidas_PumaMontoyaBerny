@@ -99,10 +99,12 @@ async def internal_signup(
 			username=payload.username,
 			email=payload.email,
 			password_hash=hash_password(payload.password),
+			role=payload.role,
 		)
 
 	access_token = create_access_token(
 		user_id=user.user_id,
+		role=user.role,
 		secret_key=settings.jwt_secret,
 		algorithm=settings.jwt_algorithm,
 		expires_minutes=settings.jwt_access_token_minutes,
@@ -116,6 +118,7 @@ async def internal_signup(
 		access_token=access_token,
 		refresh_token=refresh_token,
 		expires_in=settings.jwt_access_token_minutes * 60,
+		role=user.role,
 	)
 
 
@@ -140,6 +143,7 @@ async def internal_login(
 
 	access_token = create_access_token(
 		user_id=user.user_id,
+		role=user.role,
 		secret_key=settings.jwt_secret,
 		algorithm=settings.jwt_algorithm,
 		expires_minutes=settings.jwt_access_token_minutes,
@@ -153,6 +157,7 @@ async def internal_login(
 		access_token=access_token,
 		refresh_token=refresh_token,
 		expires_in=settings.jwt_access_token_minutes * 60,
+		role=user.role,
 	)
 
 
@@ -170,21 +175,29 @@ async def internal_refresh(
 	if not user_id:
 		raise HTTPException(status_code=401, detail="Refresh token invalido o expirado")
 
+	async with AsyncSessionLocal() as session:
+		user = await get_user_by_id(session, user_id)
+
+	if not user or not user.is_active:
+		raise HTTPException(status_code=401, detail="Usuario no encontrado o inactivo")
+
 	access_token = create_access_token(
-		user_id=user_id,
+		user_id=user.user_id,
+		role=user.role,
 		secret_key=settings.jwt_secret,
 		algorithm=settings.jwt_algorithm,
 		expires_minutes=settings.jwt_access_token_minutes,
 	)
 	refresh_token = await issue_refresh_token(
 		app.state.redis,
-		user_id=user_id,
+		user_id=user.user_id,
 		refresh_days=settings.jwt_refresh_token_days,
 	)
 	return TokenResponse(
 		access_token=access_token,
 		refresh_token=refresh_token,
 		expires_in=settings.jwt_access_token_minutes * 60,
+		role=user.role,
 	)
 
 
@@ -220,6 +233,7 @@ async def internal_verify(
 	return VerifyResponse(
 		user_id=token_payload["sub"],
 		username=user.username,
+		role=user.role,
 		jti=jti,
 		exp=int(token_payload.get("exp", 0)),
 	)
@@ -280,4 +294,4 @@ async def internal_me(
 	if not user or not user.is_active:
 		raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
-	return MeResponse(user_id=user.user_id, username=user.username, email=user.email)
+	return MeResponse(user_id=user.user_id, username=user.username, email=user.email, role=user.role)

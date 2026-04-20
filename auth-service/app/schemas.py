@@ -7,6 +7,7 @@ class SignupRequest(BaseModel):
 	username: str = Field(..., min_length=3, max_length=255, examples=["newuser"])
 	email: str = Field(..., min_length=5, max_length=255, examples=["newuser@example.com"])
 	password: str = Field(..., min_length=8, examples=["ChangeMe123!"])
+	role: str = Field(default="user", pattern="^(admin|user)$", examples=["user"])
 
 
 class LoginRequest(BaseModel):
@@ -36,11 +37,13 @@ class TokenResponse(BaseModel):
 	refresh_token: str
 	token_type: str = "bearer"
 	expires_in: int
+	role: str = "user"
 
 
 class VerifyResponse(BaseModel):
 	user_id: str
 	username: str
+	role: str
 	jti: str
 	exp: int
 
@@ -49,3 +52,4 @@ class MeResponse(BaseModel):
 	user_id: str
 	username: str
 	email: str
+	role: str
