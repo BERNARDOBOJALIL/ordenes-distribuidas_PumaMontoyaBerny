@@ -1,9 +1,53 @@
 name: CI #nombre del workflow
-on: [push, pull_request] #eventos que disparan el workflow
+on: #evento que dispara el workflow
+  push:
+    branches: [main] #rama en la que se ejecutará el workflow
+  pull_request:
+    branches: [main] #rama en la que se ejecutará el workflow
 
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-        - uses: actions/checkout@v4
-        - run: echo "Hola CI"
+jobs: #definición de los trabajos que se ejecutarán
+  build-and-test: #nombre del trabajo
+    runs-on: ubuntu-latest #sistema operativo en el que se ejecutará el trabajo
+    timeout-minutes: 10 #tiempo máximo de ejecución del trabajo
+
+    steps: #pasos que se ejecutarán en el trabajo
+      - name: Checkout code #nombre del paso
+        uses: actions/checkout@v4 #acción que se utilizará para hacer checkout del código
+
+      - name: build all services #nombre del paso
+        run: docker-compose build #comando para construir los servicios definidos en el docker-compose.yml
+
+      - name: start all services #nombre del paso
+        run: |
+          cp.env.example .env
+          docker-compose -f docker-compose.yml -f docker-compose.dev.yml --env-file .env up --build -d
+
+      - name: wait for services to be healthy #nombre del paso
+        run: |
+          echo "Waiting for services to be healthy..."
+          timeout 120 bash -c '
+            until docker compose ps --format json | python3 -c "
+            import sys, json;
+            services = json.load(line) for line in sys.stdin;
+            unhealthy = [s[\"Name\"] for s in services if s.get(\"Health\") not in (\"healthy\", \"\")];
+            if unhealthy:
+                print(\"esperando bro:\", unhealthy);
+                sys.exit(1)
+            else:
+                print(\"ya no esperando bro, All services are healthy.\");
+                "; do 
+                  sleep 5;
+                done
+      - name: run integration tests #nombre del paso
+        run: |
+            chmod +x ./scripts/tests.sh
+            ./scripts/tests.sh
+
+      - name: show logs if tests fail #nombre del paso
+        if: failure() #condición para ejecutar este paso solo si falla el paso anterior
+        run: docker-compose logs -- tail=100 #comando para mostrar los últimos 100 logs de los servicios definidos en el docker-compose.yml
+
+      - name: cleanup #nombre del paso
+        if: always() 
+        run: docker-compose down -v #comando para detener y eliminar los contenedores, redes y volúmenes definidos en el docker-compose.yml
+        '
