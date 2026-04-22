@@ -274,7 +274,7 @@ async def listar_ordenes(request: Request):
     try:
         url = f"{settings.writer_service_url}/internal/orders"
         # Admin ve todas las órdenes; user solo las suyas
-        params = {} if request.state.role == "admin" else {"user_id": request.state.user_id}
+        s = {} if rparamequest.state.role == "admin" else {"user_id": request.state.user_id}
         resp = await app.state.http.get(
             url,
             params=params,
