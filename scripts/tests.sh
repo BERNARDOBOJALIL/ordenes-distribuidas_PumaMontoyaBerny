@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Orquesta la suite de integracion distribuida y ejecuta los tests por fases.
+
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 TESTS_DIR="$SCRIPT_DIR/tests"
 
@@ -19,6 +21,7 @@ tests=(
   "02_auth.sh"
   "03_orders.sh"
   "04_inventory.sh"
+  "05_notification.sh"
 )
 
 for test_script in "${tests[@]}"; do
