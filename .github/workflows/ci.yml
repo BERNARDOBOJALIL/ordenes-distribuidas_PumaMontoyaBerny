@@ -26,16 +26,7 @@ jobs:
         run: |
           echo "Waiting for services to be healthy..."
           timeout 120 bash -c '
-            until docker compose ps --format json | python3 -c "
-            import sys, json
-            services = [json.loads(line) for line in sys.stdin]
-            unhealthy = [s[\"Name\"] for s in services if s.get(\"Health\") not in (\"healthy\", \"\")]
-            if unhealthy:
-                print(\"Waiting for:\", unhealthy)
-                sys.exit(1)
-            else:
-                print(\"All services are healthy.\")
-            "; do
+            until docker compose ps --format json | python3 -c "import sys,json; services=[json.loads(line) for line in sys.stdin if line.strip()]; unhealthy=[s.get(\"Name\",\"unknown\") for s in services if s.get(\"Health\") not in (\"healthy\", \"\")]; print(\"All services are healthy.\") if not unhealthy else (print(\"Waiting for:\", unhealthy), sys.exit(1))"; do
               sleep 5
             done
           '
