@@ -16,12 +16,7 @@ for _ in $(seq 1 40); do
   # Se busca trazas de procesamiento del order_id en los logs del servicio.
   LOGS="$(docker compose logs --no-color notification-service 2>/dev/null || true)"
 
-  if printf '%s' "$LOGS" | grep -F "order_id=$ORDER_ID" >/dev/null 2>&1; then
-    FOUND_NOTIFICATION_LOG="yes"
-    break
-  fi
-
-  if printf '%s' "$LOGS" | grep -F "$ORDER_ID" >/dev/null 2>&1; then
+  if printf '%s' "$LOGS" | grep -F "evento order.created recibido order_id=$ORDER_ID" >/dev/null 2>&1; then
     FOUND_NOTIFICATION_LOG="yes"
     break
   fi
