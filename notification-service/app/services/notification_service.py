@@ -27,7 +27,9 @@ def send_confirmation(event: OrderCreatedEvent) -> None:
         logger.warning("EmailJS no configurado, se imprime en log.")
         logger.info(
             "[MOCK EMAIL] customer=%s order_id=%s items=%s",
-            event.customer, event.order_id, event.items,
+            event.customer,
+            event.order_id,
+            event.items,
         )
         return
 
@@ -43,9 +45,9 @@ def send_confirmation(event: OrderCreatedEvent) -> None:
     }
 
     payload = {
-        "service_id":  settings.emailjs_service_id,
+        "service_id": settings.emailjs_service_id,
         "template_id": settings.emailjs_template_id,
-        "user_id":     settings.emailjs_public_key,
+        "user_id": settings.emailjs_public_key,
         "accessToken": settings.emailjs_private_key,
         "template_params": template_params,
     }
@@ -55,12 +57,14 @@ def send_confirmation(event: OrderCreatedEvent) -> None:
         if resp.status_code == 200:
             logger.info(
                 "email enviado a=%s order_id=%s",
-                settings.notification_to_email, event.order_id,
+                settings.notification_to_email,
+                event.order_id,
             )
         else:
             logger.error(
                 "EmailJS respondió %d: %s",
-                resp.status_code, resp.text,
+                resp.status_code,
+                resp.text,
             )
     except Exception as exc:
         logger.error("error enviando email: %s", exc)

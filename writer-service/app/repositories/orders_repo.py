@@ -36,24 +36,18 @@ async def upsert_order(
 
 async def get_order(session: AsyncSession, order_id: str) -> Order | None:
     """Return an Order by primary key, or None if not found."""
-    result = await session.execute(
-        select(Order).where(Order.order_id == order_id)
-    )
+    result = await session.execute(select(Order).where(Order.order_id == order_id))
     return result.scalar_one_or_none()
 
 
 async def get_all_orders(session: AsyncSession) -> list[Order]:
     """Return all orders ordered by created_at descending."""
-    result = await session.execute(
-        select(Order).order_by(Order.created_at.desc())
-    )
+    result = await session.execute(select(Order).order_by(Order.created_at.desc()))
     return list(result.scalars().all())
 
 
 async def get_all_orders_by_user(session: AsyncSession, user_id: str) -> list[Order]:
     result = await session.execute(
-        select(Order)
-        .where(Order.user_id == user_id)
-        .order_by(Order.created_at.desc())
+        select(Order).where(Order.user_id == user_id).order_by(Order.created_at.desc())
     )
     return list(result.scalars().all())

@@ -13,14 +13,24 @@ def normalize_database_url(raw_url: str) -> str:
     if normalized.startswith("postgresql://"):
         normalized = normalized.replace("postgresql://", "postgresql+asyncpg://", 1)
     if normalized.startswith("postgresql+psycopg2://"):
-        normalized = normalized.replace("postgresql+psycopg2://", "postgresql+asyncpg://", 1)
+        normalized = normalized.replace(
+            "postgresql+psycopg2://", "postgresql+asyncpg://", 1
+        )
 
     parts = urlsplit(normalized)
     db_name = parts.path.lstrip("/")
 
     if db_name.endswith("}") and "{" not in db_name:
         cleaned_name = db_name.rstrip("}")
-        normalized = urlunsplit((parts.scheme, parts.netloc, f"/{cleaned_name}", parts.query, parts.fragment))
+        normalized = urlunsplit(
+            (
+                parts.scheme,
+                parts.netloc,
+                f"/{cleaned_name}",
+                parts.query,
+                parts.fragment,
+            )
+        )
         parts = urlsplit(normalized)
         db_name = parts.path.lstrip("/")
 

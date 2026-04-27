@@ -12,7 +12,10 @@ logger = logging.getLogger("auth-service")
 async def seed_default_user_if_empty(session: AsyncSession) -> int:
     existing_users = await count_users(session)
     if existing_users > 0:
-        logger.info("[Seeder] Tabla users ya tiene %d registros, no se inserta usuario default.", existing_users)
+        logger.info(
+            "[Seeder] Tabla users ya tiene %d registros, no se inserta usuario default.",
+            existing_users,
+        )
         return 0
 
     await create_user(

@@ -1,4 +1,4 @@
-from typing import Any, List, Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -14,7 +14,7 @@ class InternalOrder(BaseModel):
     order_id: str = Field(..., examples=["550e8400-e29b-41d4-a716-446655440000"])
     user_id: str = Field(..., examples=["550e8400-e29b-41d4-a716-446655440111"])
     customer: str = Field(..., examples=["Berny"])
-    items:    List[ItemPayload] = Field(..., examples=[[{"sku": "A1", "qty": 2}]])
+    items: List[ItemPayload] = Field(..., examples=[[{"sku": "A1", "qty": 2}]])
 
 
 class ProductResponse(BaseModel):

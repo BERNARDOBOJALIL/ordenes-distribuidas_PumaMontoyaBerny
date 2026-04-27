@@ -28,7 +28,7 @@ logger = logging.getLogger("api-gateway")
 # ─── Lifecycle ────────────────────────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    app.state.http  = httpx.AsyncClient()
+    app.state.http = httpx.AsyncClient()
     app.state.redis = aioredis.from_url(settings.redis_url, decode_responses=True)
     yield
     await app.state.http.aclose()
@@ -87,7 +87,9 @@ async def auth_middleware(request: Request, call_next):
             timeout=5.0,
         )
         if verify_resp.status_code == 401:
-            return JSONResponse(status_code=401, content={"detail": "Token invalido o expirado"})
+            return JSONResponse(
+                status_code=401, content={"detail": "Token invalido o expirado"}
+            )
         verify_resp.raise_for_status()
 
         verify_data = verify_resp.json()
@@ -96,9 +98,13 @@ async def auth_middleware(request: Request, call_next):
         request.state.role = verify_data.get("role", "user")
         request.state.access_token = token
     except httpx.HTTPStatusError:
-        return JSONResponse(status_code=503, content={"detail": "Auth service no disponible"})
+        return JSONResponse(
+            status_code=503, content={"detail": "Auth service no disponible"}
+        )
     except Exception:
-        return JSONResponse(status_code=503, content={"detail": "Auth service no disponible"})
+        return JSONResponse(
+            status_code=503, content={"detail": "Auth service no disponible"}
+        )
 
     return await call_next(request)
 
@@ -109,7 +115,12 @@ async def root():
     return {"gateway": "API Gateway activo", "version": "1.0.0", "docs": "/docs"}
 
 
-@app.post("/auth/signup", response_model=TokenResponse, tags=["Auth"], summary="Registrar usuario")
+@app.post(
+    "/auth/signup",
+    response_model=TokenResponse,
+    tags=["Auth"],
+    summary="Registrar usuario",
+)
 async def signup(payload: SignupRequest):
     try:
         url = f"{settings.auth_service_url}/internal/auth/signup"
@@ -120,16 +131,25 @@ async def signup(payload: SignupRequest):
             timeout=5.0,
         )
         if resp.status_code == 409:
-            raise HTTPException(status_code=409, detail=resp.json().get("detail", "Usuario ya existe"))
+            raise HTTPException(
+                status_code=409, detail=resp.json().get("detail", "Usuario ya existe")
+            )
         resp.raise_for_status()
         return resp.json()
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"Auth service no disponible: {exc}")
+        raise HTTPException(
+            status_code=503, detail=f"Auth service no disponible: {exc}"
+        )
 
 
-@app.post("/auth/login", response_model=TokenResponse, tags=["Auth"], summary="Login de usuario")
+@app.post(
+    "/auth/login",
+    response_model=TokenResponse,
+    tags=["Auth"],
+    summary="Login de usuario",
+)
 async def login(payload: LoginRequest):
     try:
         url = f"{settings.auth_service_url}/internal/auth/login"
@@ -146,10 +166,17 @@ async def login(payload: LoginRequest):
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"Auth service no disponible: {exc}")
+        raise HTTPException(
+            status_code=503, detail=f"Auth service no disponible: {exc}"
+        )
 
 
-@app.post("/auth/refresh", response_model=TokenResponse, tags=["Auth"], summary="Renovar access token")
+@app.post(
+    "/auth/refresh",
+    response_model=TokenResponse,
+    tags=["Auth"],
+    summary="Renovar access token",
+)
 async def refresh_tokens(payload: RefreshRequest):
     try:
         url = f"{settings.auth_service_url}/internal/auth/refresh"
@@ -160,13 +187,17 @@ async def refresh_tokens(payload: RefreshRequest):
             timeout=5.0,
         )
         if resp.status_code == 401:
-            raise HTTPException(status_code=401, detail="Refresh token invalido o expirado")
+            raise HTTPException(
+                status_code=401, detail="Refresh token invalido o expirado"
+            )
         resp.raise_for_status()
         return resp.json()
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"Auth service no disponible: {exc}")
+        raise HTTPException(
+            status_code=503, detail=f"Auth service no disponible: {exc}"
+        )
 
 
 @app.post("/auth/logout", tags=["Auth"], summary="Cerrar sesion y revocar token")
@@ -186,10 +217,17 @@ async def logout(payload: LogoutRequest, request: Request):
         resp.raise_for_status()
         return resp.json()
     except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"Auth service no disponible: {exc}")
+        raise HTTPException(
+            status_code=503, detail=f"Auth service no disponible: {exc}"
+        )
 
 
-@app.get("/auth/me", response_model=MeResponse, tags=["Auth"], summary="Perfil del usuario autenticado")
+@app.get(
+    "/auth/me",
+    response_model=MeResponse,
+    tags=["Auth"],
+    summary="Perfil del usuario autenticado",
+)
 async def me(request: Request):
     token = getattr(request.state, "access_token", "")
     if not token:
@@ -210,7 +248,9 @@ async def me(request: Request):
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"Auth service no disponible: {exc}")
+        raise HTTPException(
+            status_code=503, detail=f"Auth service no disponible: {exc}"
+        )
 
 
 # ─── Ordenes ──────────────────────────────────────────────────────────────────
@@ -257,7 +297,9 @@ async def obtener_orden(order_id: str, request: Request):
     """Lee HGETALL order:{order_id} desde Redis y devuelve el estado."""
     data = await get_order_status(app.state.redis, order_id)
     if not data:
-        raise HTTPException(status_code=404, detail=f"Orden {order_id} no encontrada en Redis")
+        raise HTTPException(
+            status_code=404, detail=f"Orden {order_id} no encontrada en Redis"
+        )
 
     if request.state.role != "admin" and data.get("user_id") != request.state.user_id:
         raise HTTPException(status_code=404, detail=f"Orden {order_id} no encontrada")
@@ -274,7 +316,11 @@ async def listar_ordenes(request: Request):
     try:
         url = f"{settings.writer_service_url}/internal/orders"
         # Admin ve todas las órdenes; user solo las suyas
-        s = {} if rparamequest.state.role == "admin" else {"user_id": request.state.user_id}
+        params = (
+    {}
+    if request.state.role == "admin"
+    else {"user_id": request.state.user_id}
+)
         resp = await app.state.http.get(
             url,
             params=params,
@@ -284,7 +330,9 @@ async def listar_ordenes(request: Request):
         resp.raise_for_status()
         return resp.json()
     except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"Writer service no disponible: {exc}")
+        raise HTTPException(
+            status_code=503, detail=f"Writer service no disponible: {exc}"
+        )
 
 
 @app.get(
@@ -300,7 +348,9 @@ async def get_inventory_stock():
         resp.raise_for_status()
         return resp.json()
     except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"Inventory service no disponible: {exc}")
+        raise HTTPException(
+            status_code=503, detail=f"Inventory service no disponible: {exc}"
+        )
 
 
 # ─── Productos ────────────────────────────────────────────────────────────────
@@ -321,7 +371,9 @@ async def listar_productos():
         resp.raise_for_status()
         return resp.json()
     except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"Writer service no disponible: {exc}")
+        raise HTTPException(
+            status_code=503, detail=f"Writer service no disponible: {exc}"
+        )
 
 
 @app.get(
@@ -345,4 +397,6 @@ async def obtener_producto(sku: str):
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"Writer service no disponible: {exc}")
+        raise HTTPException(
+            status_code=503, detail=f"Writer service no disponible: {exc}"
+        )

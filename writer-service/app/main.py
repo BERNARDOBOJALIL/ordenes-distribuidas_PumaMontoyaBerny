@@ -24,8 +24,17 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
 from .db import AsyncSessionLocal, init_db
-from .repositories.orders_repo import get_all_orders, get_all_orders_by_user, upsert_order
-from .repositories.products_repo import get_all_products, get_product_by_sku, reduce_stock, validate_stock
+from .repositories.orders_repo import (
+    get_all_orders,
+    get_all_orders_by_user,
+    upsert_order,
+)
+from .repositories.products_repo import (
+    get_all_products,
+    get_product_by_sku,
+    reduce_stock,
+    validate_stock,
+)
 from .schemas import InternalOrder, ProductResponse
 from .seed import seed_products_if_empty
 
@@ -136,7 +145,9 @@ async def persist_order(
     # ── Validación de stock ────────────────────────────────────────────────────
     try:
         async with AsyncSessionLocal() as val_session:
-            await validate_stock(val_session, [item.model_dump() for item in payload.items])
+            await validate_stock(
+                val_session, [item.model_dump() for item in payload.items]
+            )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail={"stock_errors": list(exc.args[0])})
 
@@ -153,7 +164,9 @@ async def persist_order(
         if created:
             # Descontar stock de la tabla products
             async with AsyncSessionLocal() as stock_session:
-                await reduce_stock(stock_session, [item.model_dump() for item in payload.items])
+                await reduce_stock(
+                    stock_session, [item.model_dump() for item in payload.items]
+                )
 
             event = {
                 "event_type": "order.created",
@@ -161,11 +174,17 @@ async def persist_order(
                 "user_id": payload.user_id,
                 "customer": payload.customer,
                 "items": [item.model_dump() for item in payload.items],
-                "created_at": order.created_at.isoformat() if order.created_at else datetime.now(timezone.utc).isoformat(),
+                "created_at": order.created_at.isoformat()
+                if order.created_at
+                else datetime.now(timezone.utc).isoformat(),
                 "request_id": request_id,
             }
             await asyncio.to_thread(publish_order_created_event, event)
-            logger.info("[POST /internal/orders] event published routing_key=%s order_id=%s", settings.order_created_routing_key, payload.order_id)
+            logger.info(
+                "[POST /internal/orders] event published routing_key=%s order_id=%s",
+                settings.order_created_routing_key,
+                payload.order_id,
+            )
 
         now = datetime.now(timezone.utc).isoformat()
         await redis.hset(
@@ -199,10 +218,13 @@ async def persist_order(
     tags=["Internal"],
     summary="Lista todas las órdenes desde PostgreSQL",
 )
-async def list_orders(request: Request, _: None = Depends(require_internal_service_key)):
+async def list_orders(
+    request: Request, _: None = Depends(require_internal_service_key)
+):
     """Devuelve todas las órdenes guardadas en PostgreSQL."""
     user_id = request.query_params.get("user_id")
     import json as _json
+
     async with AsyncSessionLocal() as session:
         if user_id:
             orders = await get_all_orders_by_user(session, user_id)

@@ -10,17 +10,20 @@ class ItemPayload(BaseModel):
 
 class OrderCreate(BaseModel):
     """Body of POST /orders."""
+
     items: List[ItemPayload] = Field(..., examples=[[{"sku": "A1", "qty": 2}]])
 
 
 class OrderAccepted(BaseModel):
     """202 response when an order is accepted."""
+
     order_id: str
     status: str = "RECEIVED"
 
 
 class OrderStatus(BaseModel):
     """GET /orders/{order_id} response from Redis hash."""
+
     order_id: str
     status: str
     last_update: Optional[str] = None
@@ -33,7 +36,9 @@ class LoginRequest(BaseModel):
 
 class SignupRequest(BaseModel):
     username: str = Field(..., min_length=3, max_length=255, examples=["newuser"])
-    email: str = Field(..., min_length=5, max_length=255, examples=["newuser@example.com"])
+    email: str = Field(
+        ..., min_length=5, max_length=255, examples=["newuser@example.com"]
+    )
     password: str = Field(..., min_length=8, examples=["ChangeMe123!"])
     role: str = Field(default="user", pattern="^(admin|user)$", examples=["user"])
 

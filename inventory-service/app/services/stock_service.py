@@ -22,8 +22,7 @@ def apply_order_created(event: OrderCreatedEvent) -> None:
 def get_stock_snapshot() -> StockResponse:
     with _stock_lock:
         items = [
-            StockItem(sku=sku, stock=qty)
-            for sku, qty in sorted(_stock_by_sku.items())
+            StockItem(sku=sku, stock=qty) for sku, qty in sorted(_stock_by_sku.items())
         ]
 
     return StockResponse(items=items, total_skus=len(items))

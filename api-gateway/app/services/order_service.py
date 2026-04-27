@@ -37,7 +37,12 @@ async def send_to_writer(
         mapping={"status": "RECEIVED", "last_update": now, "user_id": user_id},
     )
 
-    payload = {"order_id": order_id, "user_id": user_id, "customer": customer, "items": items}
+    payload = {
+        "order_id": order_id,
+        "user_id": user_id,
+        "customer": customer,
+        "items": items,
+    }
     headers = {
         "X-Request-Id": request_id,
         "X-Service-Key": service_key,
@@ -52,15 +57,23 @@ async def send_to_writer(
         try:
             logger.info(
                 "[send_to_writer] attempt %d/%d  order_id=%s  X-Request-Id=%s",
-                attempt, attempts, order_id, request_id,
+                attempt,
+                attempts,
+                order_id,
+                request_id,
             )
-            resp = await http_client.post(url, json=payload, headers=headers, timeout=timeout)
+            resp = await http_client.post(
+                url, json=payload, headers=headers, timeout=timeout
+            )
             if resp.status_code == 201:
-                logger.info("[send_to_writer] ✓ Writer returned 201 for order_id=%s", order_id)
+                logger.info(
+                    "[send_to_writer] ✓ Writer returned 201 for order_id=%s", order_id
+                )
                 return "RECEIVED"
             if 400 <= resp.status_code < 500:
                 # Error de negocio (ej. stock insuficiente) — propagar al cliente sin reintentar
                 from fastapi import HTTPException
+
                 raise HTTPException(
                     status_code=resp.status_code,
                     detail=resp.json().get("detail", resp.text),
@@ -76,7 +89,12 @@ async def send_to_writer(
         f"order:{order_id}",
         mapping={"status": "FAILED", "last_update": now},
     )
-    logger.error("[send_to_writer] ✗ FAILED order_id=%s after %d attempts: %s", order_id, attempts, last_error)
+    logger.error(
+        "[send_to_writer] ✗ FAILED order_id=%s after %d attempts: %s",
+        order_id,
+        attempts,
+        last_error,
+    )
     return "FAILED"
 
 
