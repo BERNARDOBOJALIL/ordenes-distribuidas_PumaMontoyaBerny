@@ -15,6 +15,12 @@ logger = logging.getLogger("notification-service")
 def handle_order_created_message(body: bytes) -> None:
     payload = json.loads(body.decode("utf-8"))
     event = OrderCreatedEvent.model_validate(payload)
+    logger.info(
+        "evento order.created recibido order_id=%s customer=%s items=%d",
+        event.order_id,
+        event.customer,
+        len(event.items),
+    )
     send_confirmation(event)
 
 

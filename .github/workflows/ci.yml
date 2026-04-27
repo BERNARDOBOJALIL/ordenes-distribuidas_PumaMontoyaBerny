@@ -8,38 +8,38 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 11
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Build all services
-        run: docker-compose build
+        run: docker compose build
 
       - name: Start all services
         run: |
           cp .env.example .env
-          docker-compose -f docker-compose.yml -f docker-compose.dev.yml --env-file .env up --build -d
+          docker compose -f docker-compose.yml --env-file .env up --build -d
 
       - name: Wait for services to be healthy
         run: |
           echo "Waiting for services to be healthy..."
           timeout 120 bash -c '
-            until docker compose ps --format json | python3 -c "
-            import sys, json
-            services = [json.loads(line) for line in sys.stdin]
-            unhealthy = [s[\"Name\"] for s in services if s.get(\"Health\") not in (\"healthy\", \"\")]
-            if unhealthy:
-                print(\"Waiting for:\", unhealthy)
-                sys.exit(1)
-            else:
-                print(\"All services are healthy.\")
-            "; do
+            until docker compose ps --format json | python3 -c "import sys,json; services=[json.loads(line) for line in sys.stdin if line.strip()]; unhealthy=[s.get(\"Name\",\"unknown\") for s in services if s.get(\"Health\") not in (\"healthy\", \"\")]; print(\"All services are healthy.\") if not unhealthy else (print(\"Waiting for:\", unhealthy), sys.exit(1))"; do
               sleep 5
             done
           '
 
+      - name: Wait for API Gateway readiness
+        run: |
+          echo "Waiting for API Gateway endpoint..."
+          timeout 120 bash -c '
+            until [ "$(curl -sS -o /dev/null -w "%{http_code}" http://localhost:8000/ || true)" = "200" ]; do
+              echo "Gateway not ready yet"
+              sleep 3
+            done
+          '
       - name: Run integration tests
         run: |
           chmod +x ./scripts/tests.sh
@@ -47,10 +47,8 @@ jobs:
 
       - name: Show logs if tests fail
         if: failure()
-        run: docker-compose logs --tail=100
+        run: docker compose logs --tail=100
 
       - name: Cleanup
         if: always()
-        run: docker-compose down -v
-
-        ##ya cambiado
+        run: docker compose down -v
