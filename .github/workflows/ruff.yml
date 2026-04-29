@@ -1,0 +1,24 @@
+name: Ruff Linting
+on:
+  push:
+    branches: [feature/auth]
+  pull_request:
+    branches: [feature/auth]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install Ruff
+        run: pip install ruff
+
+      - name: Run Ruff check
+        run: ruff check .
